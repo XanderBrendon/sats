@@ -46,11 +46,5 @@ coverage/
 *.tmp
 *.temp
 
-# Test files
-test_logo.png
-test_logo_decoded.png
-sgldt_base64.txt
-sgldt_correct_base64.txt
-
 # Zone.Identifier files (Windows)
 *:Zone.Identifier 

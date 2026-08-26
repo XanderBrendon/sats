@@ -1,26 +1,19 @@
 import './App.css';
-import React, { useState, useEffect, ReactElement, useRef } from 'react';
-import reactLogo from './assets/gold.png';
-import sckbtcLogo from './assets/sgldt.png';
-import ckbtcLogo from './assets/gldtlogo.png';
+import { useState, useEffect } from 'react';
+import headerLogo from './assets/logo.png';
+import sckbtcLogo from './assets/sats.png';
+import ckbtcLogo from './assets/ckbtc.png';
 // import { useQueryCall, useUpdateCall } from '@ic-reactor/react';
 import { Principal } from '@dfinity/principal';
 // import {Agent, Actor, HttpAgent} from '@dfinity/agent';
 import ic from 'ic0';
 
-import { AuthClient } from '@dfinity/auth-client';
-import { HttpAgent, Actor, AnonymousIdentity } from '@dfinity/agent';
-
-import { idlFactory as icpFactory } from './declarations/nns-ledger';
-import { _SERVICE as ckbtcService } from './declarations/nns-ledger/index.d';
-
-import { idlFactory as SATSFactory } from './declarations/backend';
-import { _SERVICE as SATSService } from './declarations/service_hack/service'; // changed to service.d because dfx generate would remove the export line from index.d
-import { Stats } from './declarations/backend/backend.did.d';
-import { CircularProgress, TextField } from '@mui/material';
-import CkBTCMintingField from './components/ReBobMintingField';
-import ShowTransactionStatus from './components/ShowTransactionStatus';
-import SatsWithdrawField from './components/BobWithdrawField';
+import { _SERVICE as ckbtcService } from './declarations/ckbtc-ledger/index.d';
+// service.d rather than index.d: dfx generate strips the re-export from index.d
+import { _SERVICE as satsService } from './declarations/service_hack/service';
+import { CircularProgress } from '@mui/material';
+import CkBTCMintingField from './components/CkBTCMintingField';
+import SatsWithdrawField from './components/SatsWithdrawField';
 
 import bigintToFloatString from './bigIntToFloatString';
 import PlugLoginHandler from './components/PlugLoginHandler';
@@ -38,20 +31,16 @@ function App() {
   const [ckbtcLedgerAllowance, setCkBtcLedgerAllowance] = useState<bigint>(0n);
   const [SATSLedgerAllowance, setSATSLedgerAllowance] = useState<bigint>(0n);
 
-  const [share, setShare] = useState<bigint>(0n);
-  const [stats, setStats] = useState<Stats | null>(null);
-
   const [isConnected, setIsConnected] = useState<boolean>(false);
   const [connectionType, setConnectionType] = useState<string>('');
 
-  const [SATSActor, setSATSActor] = useState<SATSService | null>(null);
-  // const [SATSActorTemp, setSATSActorTemp] = useState<SATSService | null>(
+  const [SATSActor, setSATSActor] = useState<satsService | null>(null);
+  // const [SATSActorTemp, setSATSActorTemp] = useState<satsService | null>(
   //   null
   // );
   const [ckbtcLedgerActor, setCkBtcLedgerActor] = useState<ckbtcService | null>(null);
 
   const [totalckBTCHeld, setTotalckBTCHeld] = useState<string>('');
-  const [totalSckBTCMinted, setTotalSckBTCMinted] = useState<string>('');
 
   const [loggedInPrincipal, setLoggedInPrincipal] = useState('');
 
@@ -106,23 +95,6 @@ function App() {
     //fetchMinters();
     // Note: If `fetchBalances` depends on `icpActor` or `icdvActor`, you should ensure it's capable of handling null values or wait until these values are not null.
   }, [ckbtcLedgerActor, SATSActor]);
-
-  // useEffect(() => {
-  //   // This code runs after `icpActor` and `icdvActor` have been updated.
-  //   //console.log("actors updated", icpActor, ckbtcActor, ckbtcLedgerActor, SATSActor);
-
-  //   fetchStats();
-  //   //fetchMinters();
-  //   // Note: If `fetchBalances` depends on `icpActor` or `icdvActor`, you should ensure it's capable of handling null values or wait until these values are not null.
-  // }, [SATSActorTemp]);
-
-  // const fetchStats = async () => {
-  //   if (SATSActorTemp != null) {
-  //     const stats = await SATSActorTemp.stats();
-  //     console.log({ stats });
-  //     await setStats(stats);
-  //   }
-  // };
 
   const isValidPrincipal = (principalString: string): boolean => {
     try {
@@ -216,32 +188,16 @@ function App() {
     getSckBTCLedgerAllowance();
   };
 
-  const handleFailedWithdraw = async () => {
-    setLoading(true);
-
-    //SATSWithdraw(SATSLedgerAllowance); // 
-    setLoading(false);
-  };
-
-
-  const handleFailedMint = async () => {
-    setLoading(true);
-
-    //ckbtcDeposit(ckbtcLedgerAllowance);
-
-    setLoading(false);
-  };
-
   return (
     <div className="App">
       <div>
         <a href="https://app.sneeddao.com" target="_blank">
-          <img src={reactLogo} className="logo react" alt="React logo" />
+          <img src={headerLogo} className="logo" alt="SATS logo" />
         </a>
       </div>
       <div>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px' }}>
-          <h1>sVAULT</h1>
+          <h1>SATS</h1>
           <img src={sckbtcLogo} alt="SATS Logo" style={{ height: '40px', width: 'auto' }} />
         </div>
         <h2>Reduce the fees associated with Bitcoin by wrapping ckBTC for SATS</h2>
@@ -288,7 +244,6 @@ function App() {
         loggedInPrincipal={loggedInPrincipal}
         setLoggedInPrincipal={setLoggedInPrincipal}
               />
-      {(() => { console.log('App render - isConnected:', isConnected, 'connectionType:', connectionType); return null; })()}
       {!isConnected ? (
         <></>
       ) : (
@@ -400,7 +355,7 @@ function App() {
       <p className="read-the-docs">
         ⚠️ IMPORTANT NOTICE - NO RESPONSIBILITY DISCLAIMER ⚠️
 
-BY USING THE sVAULT PLATFORM, YOU EXPLICITLY ACKNOWLEDGE AND AGREE THAT YOU ARE USING THE PLATFORM ENTIRELY AT YOUR OWN RISK. WE ACCEPT ABSOLUTELY NO RESPONSIBILITY OR LIABILITY WHATSOEVER FOR ANY CONSEQUENCES RESULTING FROM YOUR USE OF THE PLATFORM.
+BY USING THE SATS PLATFORM, YOU EXPLICITLY ACKNOWLEDGE AND AGREE THAT YOU ARE USING THE PLATFORM ENTIRELY AT YOUR OWN RISK. WE ACCEPT ABSOLUTELY NO RESPONSIBILITY OR LIABILITY WHATSOEVER FOR ANY CONSEQUENCES RESULTING FROM YOUR USE OF THE PLATFORM.
 
 THIS INCLUDES, BUT IS NOT LIMITED TO: FINANCIAL LOSSES, TECHNICAL ISSUES, SECURITY BREACHES, SMART CONTRACT VULNERABILITIES, REGULATORY COMPLIANCE, OR ANY OTHER POTENTIAL RISKS OR DAMAGES.
       </p>

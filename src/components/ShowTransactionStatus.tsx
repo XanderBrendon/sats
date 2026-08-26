@@ -1,7 +1,5 @@
-//import
-
-import { CircularProgress, Paper, TextField } from '@mui/material';
-import { useEffect, useState } from 'react';
+import { CircularProgress } from '@mui/material';
+import { useState } from 'react';
 
 interface ShowTransactionStatusFieldProps {
   loading: boolean; // Change to the correct type if necessary
@@ -13,22 +11,6 @@ const ShowTransactionStatus = ({
   loading,
 }: ShowTransactionStatusFieldProps) => {
   const [expanded, setExpanded] = useState(false);
-  const [isVisible, setIsVisible] = useState(false);
-  const [height, setHeight] = useState('0px'); // Initially 0px
-
-  useEffect(() => {
-    if (statusArray.length > 0) {
-      setIsVisible(true); // Make the Paper visible immediately
-      setTimeout(() => {
-        setHeight('120px'); // After a slight delay, expand to full height
-      }, 10); // Delay to ensure initial height is applied
-    } else {
-      setHeight('0px'); // Collapse height when array is empty
-      setTimeout(() => {
-        setIsVisible(false); // After the transition, hide the Paper
-      }, 500); // Match this delay to the transition duration (500ms)
-    }
-  }, [statusArray]);
 
   return (
     <div style={{ margin: '10px', width: '100%' }}>

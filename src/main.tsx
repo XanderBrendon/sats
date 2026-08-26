@@ -6,7 +6,6 @@ import { ActorProvider, AgentProvider } from '@ic-reactor/react';
 import { idlFactory } from './declarations/backend';
 import { SATSCanisterID as canisterId } from './config';
 
-import { Principal } from '@dfinity/principal';
 
 ReactDOM.createRoot(document.getElementById('root') as HTMLElement).render(
   <React.StrictMode>

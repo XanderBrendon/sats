@@ -11,18 +11,11 @@
 const isLocal = process.env.DFX_NETWORK === 'local';
 const isStaging = process.env.DEPLOY_ENV === 'staging';
 
-// ckBTC ledger. Name kept as ckbtcCanisterID for now so this diff stays
-// reviewable; renamed in the cosmetic pass.
+// ckBTC ledger.
 export const ckbtcCanisterID = 'mxzaz-hqaaa-aaaar-qaada-cai';
 
 export const SATSCanisterID = isLocal
   ? 'bkyz2-fmaaa-aaaaa-qaaaq-cai'
   : isStaging
   ? '5r3gp-3iaaa-aaaap-qqaeq-cai'
-  : 'i2s4q-syaaa-aaaan-qz4sq-cai';
-
-export const deployTarget = isLocal
-  ? 'local'
-  : isStaging
-  ? 'staging'
-  : 'production';
+  : '4fu6t-haaaa-aaaap-quxda-cai';

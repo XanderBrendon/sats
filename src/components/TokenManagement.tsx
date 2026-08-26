@@ -1,11 +1,11 @@
 import React, { useEffect, useState } from 'react';
-import { _SERVICE as bobService } from '../declarations/nns-ledger/index.d';
-import { _SERVICE as reBobService } from '../declarations/service_hack/service';
+import { _SERVICE as ckbtcService } from '../declarations/ckbtc-ledger/index.d';
+import { _SERVICE as satsService } from '../declarations/service_hack/service';
 import TransactionBox from './TransactionBox';
 import TokenReceive from './TokenReceive';
 
 interface Token {
-  tokenActor: bobService | reBobService | null;
+  tokenActor: ckbtcService | satsService | null;
   tokenFee: bigint;
   tokenTicker: string;
   tokenDecimals: number;

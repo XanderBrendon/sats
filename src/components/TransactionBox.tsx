@@ -1,7 +1,7 @@
 import { Principal } from '@dfinity/principal';
-import { _SERVICE as bobService } from '../declarations/nns-ledger/index.d';
-import { _SERVICE as reBobService } from '../declarations/service_hack/service';
-import { InputAdornment, TextField, ThemeProvider } from '@mui/material';
+import { _SERVICE as ckbtcService } from '../declarations/ckbtc-ledger/index.d';
+import { _SERVICE as satsService } from '../declarations/service_hack/service';
+import { TextField, ThemeProvider } from '@mui/material';
 import { useEffect, useState } from 'react';
 import bigintToFloatString from '../bigIntToFloatString';
 import theme from '../theme';
@@ -9,7 +9,7 @@ import theme from '../theme';
 interface TransactionBoxProps {
   loading: boolean;
   setLoading: (value: boolean) => void;
-  tokenActor: bobService | reBobService | null;
+  tokenActor: ckbtcService | satsService | null;
   tokenFee: bigint;
   tokenTicker: string;
   tokenDecimals: number;
@@ -87,10 +87,10 @@ const TransactionBox: React.FC<TransactionBoxProps> = ({
     event: React.ChangeEvent<HTMLInputElement>
   ) => {
     const regex = new RegExp(`^\\d*\\.?\\d{0,${tokenDecimals}}$`);
-    const newBobFieldValue = event.target.value;
+    const newFieldValue = event.target.value;
 
-    if (regex.test(newBobFieldValue) || newBobFieldValue === '') {
-      setTransactionFieldValue(newBobFieldValue);
+    if (regex.test(newFieldValue) || newFieldValue === '') {
+      setTransactionFieldValue(newFieldValue);
     }
   };
 

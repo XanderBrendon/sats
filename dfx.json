@@ -14,29 +14,23 @@
         "node_compatibility": true
       }
     },
-    "fakegldt": {
-      "type": "motoko",
-      "main": "backend/FakeGLDT.mo",
-      "declarations": {
-        "node_compatibility": true
-      }
-    },
     "frontend": {
-      "dependencies": ["backend"],
+      "dependencies": [
+        "backend"
+      ],
       "type": "assets",
-      "source": ["dist/"]
+      "source": [
+        "dist/"
+      ]
     },
     "frontend-staging": {
-      "dependencies": ["backend-staging"],
+      "dependencies": [
+        "backend-staging"
+      ],
       "type": "assets",
-      "source": ["dist/"]
-    },
-    "ntn-test": {
-      "type": "motoko",
-      "main": "ntn/ntntest.mo",
-      "declarations": {
-        "node_compatibility": true
-      }
+      "source": [
+        "dist/"
+      ]
     },
     "internet_identity": {
       "type": "custom",

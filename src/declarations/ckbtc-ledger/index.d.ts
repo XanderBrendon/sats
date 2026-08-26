@@ -7,8 +7,8 @@ import type {
 import type { Principal } from '@dfinity/principal';
 import type { IDL } from '@dfinity/candid';
 
-import { _SERVICE } from './nns-ledger.did';
-export { _SERVICE } from './nns-ledger.did';
+import { _SERVICE } from './ckbtc-ledger.did';
+export { _SERVICE } from './ckbtc-ledger.did';
 
 export declare const idlFactory: IDL.InterfaceFactory;
 export declare const canisterId: string;
@@ -48,4 +48,4 @@ export declare const createActor: (
  * Intialized Actor using default settings, ready to talk to a canister using its candid interface
  * @constructs {@link ActorSubClass}
  */
-export declare const nns_ledger: ActorSubclass<_SERVICE>;
+export declare const ckbtc_ledger: ActorSubclass<_SERVICE>;

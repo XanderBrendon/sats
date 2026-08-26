@@ -2,24 +2,22 @@ import { useEffect, useState } from 'react';
 import { TextField, ThemeProvider } from '@mui/material';
 import theme from '../theme';
 import bigintToFloatString from '../bigIntToFloatString';
-import { Principal } from '@dfinity/principal';
-import { _SERVICE as ckbtcService } from '../declarations/nns-ledger/index.d'; // why is this icpService?
-import { _SERVICE as SATSService } from '../declarations/service_hack/service';
+import { _SERVICE as satsService } from '../declarations/service_hack/service';
 import ShowTransactionStatus from './ShowTransactionStatus';
 
-interface BobWithdrawFieldProps {
+interface SatsWithdrawFieldProps {
   loading: boolean;
   setLoading: (value: boolean) => void;
   SATSLedgerBalance: bigint;
   SATSFee: bigint;
   ckbtcFee: bigint;
   isConnected: boolean;
-  SATSActor: SATSService | null;
+  SATSActor: satsService | null;
   SATSCanisterID: string;
   cleanUp: () => void;
 }
 
-const BobWithdrawField: React.FC<BobWithdrawFieldProps> = ({
+const BobWithdrawField: React.FC<SatsWithdrawFieldProps> = ({
   loading,
   setLoading,
   SATSLedgerBalance,
@@ -30,10 +28,10 @@ const BobWithdrawField: React.FC<BobWithdrawFieldProps> = ({
   SATSCanisterID,
   cleanUp,
 }) => {
-  const [reBobFieldValue, setReBobFieldValue] = useState<string>('');
+  const [satsFieldValue, setSatsFieldValue] = useState<string>('');
   const [buttonDisabled, setButtonDisabled] = useState<boolean>(false);
   const [textFieldErrored, setTextFieldErrored] = useState<boolean>(false);
-  const [reBobFieldNatValue, setReBobFieldNatValue] = useState<bigint>(0n);
+  const [satsFieldNatValue, setSatsFieldNatValue] = useState<bigint>(0n);
   const [statusArray, setStatusArray] = useState<string[]>(['']);
   const [textFieldValueTooLow, setTextFieldValueTooLow] =
     useState<boolean>(true);
@@ -49,7 +47,7 @@ const BobWithdrawField: React.FC<BobWithdrawFieldProps> = ({
     }
 
     if (
-      reBobFieldNatValue + ckbtcFee + SATSFee > SATSLedgerBalance ||
+      satsFieldNatValue + ckbtcFee + SATSFee > SATSLedgerBalance ||
       SATSLedgerBalance < minimumTransactionAmount
     ) {
       // Cover the ckbtc transfer from backend fee. Cover the SATS approval fee. The SATS is burned without a fee applied.
@@ -64,79 +62,17 @@ const BobWithdrawField: React.FC<BobWithdrawFieldProps> = ({
 
     setLoading(true);
 
-// Snassy: This code is not needed (we don't need approval for SATS -> ckBTC)
-/*
-    // This step isn't needed.
-    const approvalResult = await approveSckBTC(
-      reBobFieldNatValue + ckbtcFee + SATSFee
-    );
-
-    if (!approvalResult) {
-      await cleanUp();
-      return;
-    }
-*/
-
-// Snassy: We don't need to add any fee here!
-    const result = await ckbtcWithdraw(reBobFieldNatValue);
-    // const result = await ckbtcWithdraw(reBobFieldNatValue + ckbtcFee);
+    // No approval step: withdraw burns from the caller's balance directly,
+    // and the fee comes out of the released ckBTC rather than being added on top.
+    const result = await ckbtcWithdraw(satsFieldNatValue);
 
     if (!result) {
       addStatus('SATS was approved, but was not transferred.');
     }
 
     await cleanUp();
-    setReBobFieldNatValue(0n);
-    setReBobFieldValue('');
-  };
-
-  const approveSckBTC = async (amountInE8s: bigint) => {
-    if (!SATSActor) return false;
-
-    addStatus(
-      `Requesting to approve ${bigintToFloatString(amountInE8s, 6)} SATS.`
-    );
-
-    console.log('before');
-
-    try {
-      const approvalResult = await SATSActor.icrc2_approve({
-        amount: amountInE8s, // Cover the fee of sending the ckbtc back to the user.
-        // Adjust with your canister ID and parameters
-        spender: {
-          owner: await Principal.fromText(SATSCanisterID),
-          subaccount: [],
-        },
-        memo: [],
-        fee: [SATSFee],
-        created_at_time: [BigInt(Date.now()) * 1000000n],
-        expires_at: [
-          BigInt(Date.now()) * 1000000n + 5n * 60n * 1000n * 1000000n,
-        ], // 5 minute approval.
-        expected_allowance: [],
-        from_subaccount: [],
-      });
-
-      console.log('after');
-
-      console.log({ approvalResult });
-
-      if ('Ok' in approvalResult) {
-        addStatus(
-          `${bigintToFloatString(amountInE8s, 6)} SATS approved for transfer!`
-        );
-        return true;
-      } else {
-        addStatus('SATS was not approved for transfer.');
-        return false;
-      }
-    } catch (error) {
-      console.error('Error occurred when approving SATS: ', error);
-      addStatus(
-        "Error occurred when approving SATS (Check your web browser's console)"
-      );
-    }
-    return false;
+    setSatsFieldNatValue(0n);
+    setSatsFieldValue('');
   };
 
   const ckbtcWithdraw = async (amountInE8s: bigint) => {
@@ -188,19 +124,19 @@ const BobWithdrawField: React.FC<BobWithdrawFieldProps> = ({
     setStatusArray((prevArray) => [inputText, ...prevArray]);
   };
 
-  const handleBobFieldChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFieldChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     const regex = /^\d*\.?\d{0,6}$/; // Regex to allow numbers with up to 8 decimal places
-    const newBobFieldValue = event.target.value;
+    const newFieldValue = event.target.value;
 
-    if (regex.test(newBobFieldValue) || newBobFieldValue === '') {
-      setReBobFieldValue(newBobFieldValue);
+    if (regex.test(newFieldValue) || newFieldValue === '') {
+      setSatsFieldValue(newFieldValue);
     }
   };
 
   useEffect(() => {
     const SATSNatValue =
-      reBobFieldValue && reBobFieldValue !== '.'
-        ? BigInt((parseFloat(reBobFieldValue) * 1_0000_0000).toFixed(0)) // Convert to Nat with 8 decimals
+      satsFieldValue && satsFieldValue !== '.'
+        ? BigInt((parseFloat(satsFieldValue) * 1_0000_0000).toFixed(0)) // Convert to Nat with 8 decimals
         : 0n;
 
     // console.log(SATSNatValue);
@@ -211,8 +147,8 @@ const BobWithdrawField: React.FC<BobWithdrawFieldProps> = ({
         (SATSLedgerBalance >= minimumTransactionAmount &&
           SATSNatValue + ckbtcFee + SATSFee > SATSLedgerBalance)
     );
-    setReBobFieldNatValue(SATSNatValue);
-  }, [reBobFieldValue, SATSLedgerBalance]);
+    setSatsFieldNatValue(SATSNatValue);
+  }, [satsFieldValue, SATSLedgerBalance]);
 
   return (
     <ThemeProvider theme={theme}>
@@ -241,8 +177,8 @@ const BobWithdrawField: React.FC<BobWithdrawFieldProps> = ({
           <TextField
             label="SATS"
             variant="filled"
-            value={reBobFieldValue}
-            onChange={handleBobFieldChange}
+            value={satsFieldValue}
+            onChange={handleFieldChange}
             helperText={
               buttonDisabled
                 ? "You don't have enough SATS!"

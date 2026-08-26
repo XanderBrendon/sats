@@ -20,9 +20,9 @@ low-friction transactions for automated processes.
 | Backend / SATS ledger (production) | `4fu6t-haaaa-aaaap-quxda-cai` |
 | ckBTC ledger (external) | `mxzaz-hqaaa-aaaar-qaada-cai` |
 
-**The backend canister *is* the SATS ledger.** It embeds `icrc-fungible`, so one
-canister serves both the wrapper logic and the ICRC-1/2/3/4 token. There is no
-separate ledger canister.
+**The backend canister *is* the SATS ledger.** It embeds `icrc1-mo`, `icrc2-mo`,
+`icrc3-mo` and `icrc4-mo` directly, so one canister serves both the wrapper
+logic and the ICRC-1/2/3/4 token. There is no separate ledger canister.
 
 > ⚠️ Because the ledger's minting account is the canister itself, an ICRC-1
 > transfer **to** the canister ID is a burn. The canister rejects these with a
@@ -192,8 +192,12 @@ icp canister call $BACKEND icrc1_balance_of \
 export DFX_VERSION=0.28.0
 ```
 
-dfx 0.31.0 rejects `icrc3-mo@0.3.5` with `M0219` (implicit transient);
-dfx ≤ 0.27.0 fails on `sha2@0.1.4`.
+dfx 0.31.0 rejects `icrc3-mo@0.3.5` with `M0219` (implicit transient) and
+`M0220` (implicit non-persistent actor); dfx ≤ 0.27.0 fails on `sha2@0.1.4`.
+
+> ⚠️ dfx 0.28.0 publishes **no aarch64 Linux build**. On arm64 machines
+> `dfxvm install 0.28.0` 404s, so the project cannot be built there until the
+> dependencies are moved to versions a current dfx accepts.
 
 ### Build and test
 

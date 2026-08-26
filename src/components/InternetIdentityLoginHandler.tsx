@@ -1,16 +1,17 @@
 import { idlFactory as SATSFactory } from '../declarations/backend';
-import { _SERVICE as SATSService } from '../declarations/service_hack/service'; // changed to service.d because dfx generate would remove the export line from index.d
-import { idlFactory as icpFactory } from '../declarations/nns-ledger';
-import { _SERVICE as ckbtcService } from '../declarations/nns-ledger/index.d';
-import { useEffect, useRef, useState } from 'react';
+// service.d rather than index.d: dfx generate strips the re-export from index.d
+import { _SERVICE as satsService } from '../declarations/service_hack/service';
+import { idlFactory as icpFactory } from '../declarations/ckbtc-ledger';
+import { _SERVICE as ckbtcService } from '../declarations/ckbtc-ledger/index.d';
+import { useEffect, useState } from 'react';
 import { AuthClient } from '@dfinity/auth-client';
-import { HttpAgent, Actor, AnonymousIdentity } from '@dfinity/agent';
+import { HttpAgent, Actor } from '@dfinity/agent';
 
 interface InternetIdentityLoginHandlerProps {
   ckbtcCanisterID: string;
   setCkBtcLedgerActor: (value: ckbtcService | null) => void;
   SATSCanisterID: string;
-  setSATSActor: (value: SATSService | null) => void;
+  setSATSActor: (value: satsService | null) => void;
   loading: boolean;
   setLoading: (value: boolean) => void;
   isConnected: boolean;
@@ -37,7 +38,6 @@ const InternetIdentityLoginHandler: React.FC<
   loggedInPrincipal,
   setLoggedInPrincipal,
 }) => {
-  const authClientRef = useRef<AuthClient | null>(null);
   const [authClient, setAuthClient] = useState<AuthClient | null>(null);
   const [buttonToggle, setButtonToggle] = useState(false);
 
@@ -157,7 +157,6 @@ const InternetIdentityLoginHandler: React.FC<
 
     if (process.env.DFX_NETWORK === 'local') {
       agent.fetchRootKey();
-      console.log('aaa');
     }
 
     setSATSActor(

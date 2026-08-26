@@ -1,13 +1,13 @@
 import { useEffect, useState } from 'react';
-import { TextField, ThemeProvider, createTheme } from '@mui/material';
+import { TextField, ThemeProvider } from '@mui/material';
 import theme from '../theme';
 import bigintToFloatString from '../bigIntToFloatString';
 import { Principal } from '@dfinity/principal';
-import { _SERVICE as ckbtcService } from '../declarations/nns-ledger/index.d'; // why is this icpService?
-import { _SERVICE as SATSService } from '../declarations/service_hack/service';
+import { _SERVICE as ckbtcService } from '../declarations/ckbtc-ledger/index.d';
+import { _SERVICE as satsService } from '../declarations/service_hack/service';
 import ShowTransactionStatus from './ShowTransactionStatus';
 
-interface ReBobMintingFieldProps {
+interface CkBTCMintingFieldProps {
   loading: boolean;
   setLoading: (value: boolean) => void;
   ckbtcLedgerBalance: bigint;
@@ -16,11 +16,11 @@ interface ReBobMintingFieldProps {
   SATSCanisterID: string;
   cleanUp: () => void;
   ckbtcLedgerActor: ckbtcService | null;
-  SATSActor: SATSService | null;
+  SATSActor: satsService | null;
   minimumTransactionAmount: bigint;
 }
 
-const ReBobMintingField: React.FC<ReBobMintingFieldProps> = ({
+const CkBTCMintingField: React.FC<CkBTCMintingFieldProps> = ({
   loading,
   setLoading,
   ckbtcLedgerBalance,
@@ -32,20 +32,20 @@ const ReBobMintingField: React.FC<ReBobMintingFieldProps> = ({
   SATSActor,
   minimumTransactionAmount,
 }) => {
-  const [bobFieldValue, setBobFieldValue] = useState<string>('');
+  const [ckbtcFieldValue, setCkbtcFieldValue] = useState<string>('');
   const [buttonDisabled, setButtonDisabled] = useState<boolean>(false);
   const [textFieldErrored, setTextFieldErrored] = useState<boolean>(false);
   const [statusArray, setStatusArray] = useState<string[]>(['']);
-  const [bobFieldNatValue, setBobFieldNatValue] = useState<bigint>(0n);
+  const [ckbtcFieldNatValue, setCkbtcFieldNatValue] = useState<bigint>(0n);
   const [textFieldValueTooLow, setTextFieldValueTooLow] =
     useState<boolean>(true);
 
-  const handleBobFieldChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFieldChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     const regex = /^\d*\.?\d{0,8}$/; // Regex to allow numbers with up to 8 decimal places
-    const newBobFieldValue = event.target.value;
+    const newFieldValue = event.target.value;
 
-    if (regex.test(newBobFieldValue) || newBobFieldValue === '') {
-      setBobFieldValue(newBobFieldValue);
+    if (regex.test(newFieldValue) || newFieldValue === '') {
+      setCkbtcFieldValue(newFieldValue);
     }
   };
 
@@ -56,7 +56,7 @@ const ReBobMintingField: React.FC<ReBobMintingFieldProps> = ({
     }
 
     if (
-      bobFieldNatValue + ckbtcFee * 2n > ckbtcLedgerBalance ||
+      ckbtcFieldNatValue + ckbtcFee * 2n > ckbtcLedgerBalance ||
       ckbtcLedgerBalance < minimumTransactionAmount
     ) {
       addStatus('You do not have enough ckBTC.');
@@ -70,22 +70,22 @@ const ReBobMintingField: React.FC<ReBobMintingFieldProps> = ({
 
     setLoading(true);
 
-    const approvalResult = await approveCkBtc(bobFieldNatValue + ckbtcFee);
+    const approvalResult = await approveCkBtc(ckbtcFieldNatValue + ckbtcFee);
 
     if (!approvalResult) {
       cleanUp();
       return;
     }
 
-    const result = await ckbtcDeposit(bobFieldNatValue);
+    const result = await ckbtcDeposit(ckbtcFieldNatValue);
 
     if (!result) {
       addStatus('ckBTC was approved, but was not transferred.');
     }
 
     cleanUp();
-    setBobFieldNatValue(0n);
-    setBobFieldValue('');
+    setCkbtcFieldNatValue(0n);
+    setCkbtcFieldValue('');
   };
 
   const approveCkBtc = async (amountInE8s: bigint) => {
@@ -176,8 +176,8 @@ const ReBobMintingField: React.FC<ReBobMintingFieldProps> = ({
 
   useEffect(() => {
     const ckbtcNatValue =
-      bobFieldValue && bobFieldValue !== '.'
-        ? BigInt((parseFloat(bobFieldValue) * 1_0000_0000).toFixed(0)) // Convert to Nat
+      ckbtcFieldValue && ckbtcFieldValue !== '.'
+        ? BigInt((parseFloat(ckbtcFieldValue) * 1_0000_0000).toFixed(0)) // Convert to Nat
         : 0n;
 
     // console.log(ckbtcNatValue);
@@ -188,8 +188,8 @@ const ReBobMintingField: React.FC<ReBobMintingFieldProps> = ({
         (ckbtcLedgerBalance >= minimumTransactionAmount &&
           ckbtcNatValue + ckbtcFee * 2n > ckbtcLedgerBalance)
     );
-    setBobFieldNatValue(ckbtcNatValue);
-  }, [bobFieldValue, ckbtcLedgerBalance]);
+    setCkbtcFieldNatValue(ckbtcNatValue);
+  }, [ckbtcFieldValue, ckbtcLedgerBalance]);
 
   return (
     <ThemeProvider theme={theme}>
@@ -214,8 +214,8 @@ const ReBobMintingField: React.FC<ReBobMintingFieldProps> = ({
           <TextField
             label="ckBTC"
             variant="filled"
-            value={bobFieldValue}
-            onChange={handleBobFieldChange}
+            value={ckbtcFieldValue}
+            onChange={handleFieldChange}
             helperText={
               buttonDisabled
                 ? "You don't have enough ckBTC!"
@@ -255,10 +255,9 @@ const ReBobMintingField: React.FC<ReBobMintingFieldProps> = ({
       <div>
         <ShowTransactionStatus statusArray={statusArray} loading={loading} />
 
-        {/* <RetryReBobMint/> */}
       </div>
     </ThemeProvider>
   );
 };
 
-export default ReBobMintingField;
+export default CkBTCMintingField;

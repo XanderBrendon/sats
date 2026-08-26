@@ -8,23 +8,19 @@ import Principal "mo:base/Principal";
 import Time "mo:base/Time";
 import Timer "mo:base/Timer";
 
-import CertifiedData "mo:base/CertifiedData";
 import Nat64 "mo:base/Nat64";
 import CertTree "mo:cert/CertTree";
 
 import ICRC1 "mo:icrc1-mo/ICRC1";
-import Account "mo:icrc1-mo/ICRC1/Account";
 import ICRC2 "mo:icrc2-mo/ICRC2";
 import ICRC3 "mo:icrc3-mo/";
 import ICRC3Legacy "mo:icrc3-mo/legacy";
 import ICRC4 "mo:icrc4-mo/ICRC4";
 import ClassPlus "mo:class-plus";
 
-///GLDT Token
-import Types "Types";
 import Blob "mo:base/Blob";
 import Int "mo:base/Int";
-import ICPTypes "ICPTypes";
+import CkBtcLedger "CkBtcLedger";
 import Convert "Convert";
 
 shared ({ caller = _owner }) actor class Token(
@@ -36,15 +32,10 @@ shared ({ caller = _owner }) actor class Token(
   }
 ) = this {
 
-  let Set = ICRC1.Set;
-  let Map = ICRC1.Map;
-
-  let Ledger : ICPTypes.Service = actor ("mxzaz-hqaaa-aaaar-qaada-cai"); // ckBTC Ledger
+  let Ledger : CkBtcLedger.Service = actor ("mxzaz-hqaaa-aaaar-qaada-cai");
 
   // Conversion between raw ckBTC and raw SATS lives in Convert.mo so it can be
   // unit-tested; see backend/tests/Convert.test.mo.
-
-  type Account = ICRC1.Account;
 
   let default_icrc1_args : ICRC1.InitArgs = {
     name = ?"Sat - 1 Satoshi";
@@ -192,7 +183,6 @@ shared ({ caller = _owner }) actor class Token(
   stable var accumulated_fees : Nat = 0;
   stable var fee_collector : Principal = _owner;
   stable var authorized_fee_collector : Principal = Principal.fromText("ok64y-uiaaa-aaaag-qdcbq-cai");
-  stable var total_deposit_fees : Nat = 0;
   stable var total_withdraw_fees : Nat = 0;
   stable var total_ledger_fees : Nat = 0;
 
@@ -202,18 +192,9 @@ shared ({ caller = _owner }) actor class Token(
 
   stable var sats_transaction_fee : Nat = 100; // must match the icrc1 fee above
 
-  // NEW STABLE VARIABLES FOR ICRC UPGRADE (Phase 1)
   stable var icrc106IndexCanister : ?Principal = null;
-  stable var upgradeError = "";
-  stable var upgradeComplete = false;
-
-  let #v0_1_0(#data(icrc1_state_current)) = icrc1_migration_state;
 
   private var _icrc1 : ?ICRC1.ICRC1 = null;
-
-  private func get_icrc1_state() : ICRC1.CurrentState {
-    return icrc1_state_current;
-  };
 
   private func get_icrc1_environment() : ICRC1.Environment {
     {
@@ -235,8 +216,7 @@ shared ({ caller = _owner }) actor class Token(
           name = "ICRC-10";
           url = "https://github.com/dfinity/ICRC/ICRCs/icrc-10/";
         });
-        
-        // NEW ICRC STANDARDS FOR UPGRADE (Phase 2)
+
         ignore initclass.register_supported_standards({
           name = "ICRC-103";
           url = "https://github.com/dfinity/ICRC/blob/main/ICRCs/ICRC-103"
@@ -261,13 +241,7 @@ shared ({ caller = _owner }) actor class Token(
     };
   };
 
-  let #v0_1_0(#data(icrc2_state_current)) = icrc2_migration_state;
-
   private var _icrc2 : ?ICRC2.ICRC2 = null;
-
-  private func get_icrc2_state() : ICRC2.CurrentState {
-    return icrc2_state_current;
-  };
 
   private func get_icrc2_environment() : ICRC2.Environment {
     {
@@ -287,13 +261,7 @@ shared ({ caller = _owner }) actor class Token(
     };
   };
 
-  let #v0_1_0(#data(icrc4_state_current)) = icrc4_migration_state;
-
   private var _icrc4 : ?ICRC4.ICRC4 = null;
-
-  private func get_icrc4_state() : ICRC4.CurrentState {
-    return icrc4_state_current;
-  };
 
   private func get_icrc4_environment() : ICRC4.Environment {
     {
@@ -313,7 +281,7 @@ shared ({ caller = _owner }) actor class Token(
     };
   };
 
-  private func updated_certification(cert : Blob, lastIndex : Nat) : Bool {
+  private func updated_certification(_cert : Blob, _lastIndex : Nat) : Bool {
     ct.setCertifiedData();
     return true;
   };
@@ -461,32 +429,36 @@ shared ({ caller = _owner }) actor class Token(
     Nat64.fromNat(Int.abs(Time.now()));
   };
 
-  let ONE_DAY = 86_400_000_000_000;
-
-  stable var lastError : (Text, Int) = ("null", 0);
-
-  public query (msg) func getLastError() : async (Text, Int) {
-    if (msg.caller != owner) {
-      return ("Unauthorized", 0);
-    };
-    lastError;
-  };
-
   private func refund(caller : Principal, subaccount : ?[Nat8], amount : Nat, e : Text) : async* Result.Result<(Nat, Nat), Text> {
-    try {
-      let result = await Ledger.icrc1_transfer({
+    let result = try {
+      await Ledger.icrc1_transfer({
         from_subaccount = null;
         fee = null;
         to = {
           owner = caller;
           subaccount = subaccount;
         };
-        memo = ?Blob.toArray("\98\5c\db\3b\74\ce\88\61\3a\35\ee\2e\0e\39\a9\f6\c5\1d\ee\e9\ea\53\89\2d\e8\da\53\da\de\46\57\64" : Blob); //"GLDT Return"
+        memo = ?Blob.toArray("\20\5e\86\b6\0c\cc\a7\68\db\f6\3f\4b\31\33\ab\30\a5\e5\d6\a3\dd\c2\05\14\49\82\b3\5d\07\38\90\36" : Blob); // sha256("SATS Refund")
         created_at_time = ?time64();
         amount = amount;
       });
-    } catch (e) {
-      return #err("stuck funds");
+    } catch (trapped) {
+      log.add(debug_show (Time.now()) # " STUCK FUNDS - refund trapped: " # Error.message(trapped));
+      return #err("stuck funds - " # Error.message(trapped));
+    };
+
+    switch (result) {
+      case (#Err(refundErr)) {
+        // The caller's ckBTC was pulled in, the mint failed, and sending it
+        // back also failed. Nothing else here can recover it.
+        log.add(debug_show (Time.now()) # " STUCK FUNDS - refund rejected: " # debug_show (refundErr));
+        return #err(
+          "cannot transfer to minter " # e #
+          " and the refund was rejected: " # debug_show (refundErr) #
+          " - funds are stuck, contact the canister owner"
+        );
+      };
+      case (#Ok(_)) {};
     };
 
     return #err("cannot transfer to minter " # e);
@@ -513,7 +485,7 @@ shared ({ caller = _owner }) actor class Token(
           owner = caller;
           subaccount = subaccount;
         };
-        memo = ?Blob.toArray("\4d\03\4c\3e\2f\15\84\ae\3d\86\d6\70\a5\e2\7e\9b\ad\3c\14\17\a6\3c\d8\9e\9b\f9\37\01\35\8d\c3\0e" : Blob); //"sGLDT Deposit"
+        memo = ?Blob.toArray("\db\e3\b6\f3\88\89\d3\f1\38\0f\74\f4\d3\97\99\1a\17\41\1b\16\2d\06\05\ab\a9\de\7c\ae\d5\ed\4f\28" : Blob); // sha256("SATS Deposit")
         created_at_time = ?time64();
         amount = amount;
       });
@@ -529,7 +501,7 @@ shared ({ caller = _owner }) actor class Token(
       };
     };
 
-    // Track the GLDT ledger fee (0.1 GLDT) that was deducted during transfer
+    // Track the ckBTC ledger fee that was deducted during the transfer_from.
     total_ledger_fees := total_ledger_fees + ckbtc_transaction_fee;
 
     // `amount` is raw ckBTC in; `mintingAmount` is raw SATS out.
@@ -547,7 +519,7 @@ shared ({ caller = _owner }) actor class Token(
         };
         amount = mintingAmount; // The number of tokens to mint.
         created_at_time = ?time64();
-        memo = ?("\6d\7a\68\d6\ce\4d\2f\8e\60\72\af\e3\73\91\c8\d8\67\b5\6f\69\35\bc\ca\9a\7b\d9\40\19\fd\6e\3c\16" : Blob); //"sGLDT mint"
+        memo = ?("\06\ee\c5\69\5c\27\ba\3d\09\07\54\0c\93\2d\aa\16\ca\c8\d4\ff\eb\ff\13\98\e9\f6\3b\88\3e\c4\5a\7f" : Blob); // sha256("SATS Mint")
       },
     );
 
@@ -596,7 +568,7 @@ shared ({ caller = _owner }) actor class Token(
           case (?val) ?Blob.fromArray(val);
         }; // The subaccount from which tokens are burned.
         amount = burn_amount; // whole satoshis only; the remainder stays with the caller
-        memo = ?("\d8\d9\b4\5f\41\5d\5a\c3\be\e5\21\2c\10\f4\bb\6d\07\52\7d\01\17\7e\58\e0\13\03\39\90\00\c5\a8\94" : Blob); //sGLDT Withdraw
+        memo = ?("\28\d8\70\88\d3\94\fc\6d\5d\f7\4d\f9\86\d2\4e\2c\e0\63\29\b2\39\57\06\a2\9c\fb\69\8e\93\18\b2\8e" : Blob); // sha256("SATS Withdraw")
         created_at_time = ?time64(); // The time the burn operation was created.
       },
     );
@@ -613,7 +585,7 @@ shared ({ caller = _owner }) actor class Token(
         };
         fee = null;
         from_subaccount = null;
-        memo = ?Blob.toArray("\d8\d9\b4\5f\41\5d\5a\c3\be\e5\21\2c\10\f4\bb\6d\07\52\7d\01\17\7e\58\e0\13\03\39\90\00\c5\a8\94"); //sGLDT Withdraw
+        memo = ?Blob.toArray("\28\d8\70\88\d3\94\fc\6d\5d\f7\4d\f9\86\d2\4e\2c\e0\63\29\b2\39\57\06\a2\9c\fb\69\8e\93\18\b2\8e"); // sha256("SATS Withdraw")
         created_at_time = ?time64();
         amount = gross_ckbtc - ckbtc_total_fee; // raw ckBTC out
       },
@@ -625,7 +597,8 @@ shared ({ caller = _owner }) actor class Token(
         if (ckbtc_conversion_fee > 0) {
           switch (icrc1().get_state().fee_collector) {
             case (null) {
-              // count gldt retained as fees that admin may collect (gldt fee mode) 
+              // No fee collector configured: retain the fee as ckBTC in reserves
+              // for the admin to collect later.
               accumulated_fees := accumulated_fees + ckbtc_conversion_fee;
             };
             case (?fee_collector) {
@@ -634,7 +607,7 @@ shared ({ caller = _owner }) actor class Token(
                 {
                   to = fee_collector;
                   amount = Convert.toSats(ckbtc_conversion_fee); // retained in ckBTC, minted in SATS
-                  memo = ?("\d8\d9\b4\5f\41\5d\5a\c3\be\e5\21\2c\10\f4\bb\6d\07\52\7d\01\17\7e\58\e0\13\03\39\90\00\c5\a8\94" : Blob); //sGLDT Withdraw
+                  memo = ?("\80\5c\0b\cd\2b\66\0a\44\e2\b5\1a\53\ab\8c\46\21\af\9d\dd\eb\02\06\3b\85\c1\fe\99\f8\e1\5d\31\d4" : Blob); // sha256("SATS Fee")
                   created_at_time = ?time64(); // The time the burn operation was created.
                 },
               );
@@ -643,13 +616,10 @@ shared ({ caller = _owner }) actor class Token(
               // so a collector pointed at this canister makes the fee vanish
               // silently and the value sits in reserves unbacked.
               switch (mintFeeResult) {
-                case (#trappable(#Err(err)) or #awaited(#Err(err))) {
+                case (#Err(err)) {
                   log.add(debug_show (Time.now()) # " conversion fee mint failed: " # debug_show (err));
                 };
-                case (#err(#trappable(err)) or #err(#awaited(err))) {
-                  log.add(debug_show (Time.now()) # " conversion fee mint failed: " # err);
-                };
-                case (_) {};
+                case (#Ok(_)) {};
               };
             };
           };
@@ -673,11 +643,26 @@ shared ({ caller = _owner }) actor class Token(
               }; // The subaccount from which tokens are burned.
             };
             amount = burn_amount; // must match exactly what was burned
-            memo = ?("\d8\d9\b4\5f\41\5d\5a\c3\be\e5\21\2c\10\f4\bb\6d\07\52\7d\01\17\7e\58\e0\13\03\39\90\00\c5\a8\94" : Blob); //sGLDT Withdraw
+            memo = ?("\20\5e\86\b6\0c\cc\a7\68\db\f6\3f\4b\31\33\ab\30\a5\e5\d6\a3\dd\c2\05\14\49\82\b3\5d\07\38\90\36" : Blob); // sha256("SATS Refund")
             created_at_time = ?time64(); // The time the burn operation was created.
           },
         );
         log.add(debug_show (Time.now()) # "trying withdraw from " # debug_show (err));
+
+        switch (remintResult) {
+          case (#Err(remintErr)) {
+            // The burn is not reversed: the caller has lost the SATS and no
+            // ckBTC went out. Surface it -- this needs manual reconciliation.
+            log.add(debug_show (Time.now()) # " STUCK FUNDS - re-mint after failed withdraw failed: " # debug_show (remintErr));
+            return #err(
+              "cannot withdraw - failed" # debug_show (err) #
+              " and the compensating re-mint also failed: " # debug_show (remintErr) #
+              " - funds are stuck, contact the canister owner"
+            );
+          };
+          case (#Ok(_)) {};
+        };
+
         return #err("cannot withdraw - failed" # debug_show (err));
       };
     };
@@ -739,7 +724,7 @@ shared ({ caller = _owner }) actor class Token(
     return ICRC1.Vector.toArray(results);
   };
 
-  public query ({ caller }) func icrc2_allowance(args : ICRC2.AllowanceArgs) : async ICRC2.Allowance {
+  public query func icrc2_allowance(args : ICRC2.AllowanceArgs) : async ICRC2.Allowance {
     return icrc2().allowance(args.spender, args.account, false);
   };
 
@@ -960,13 +945,11 @@ shared ({ caller = _owner }) actor class Token(
 
   public query func get_fee_stats() : async {
     accumulated_fees : Nat;
-    total_deposit_fees : Nat;
     total_withdraw_fees : Nat;
     total_ledger_fees : Nat;
   } {
     {
       accumulated_fees = accumulated_fees;
-      total_deposit_fees = total_deposit_fees;
       total_withdraw_fees = total_withdraw_fees;
       total_ledger_fees = total_ledger_fees;
     };
@@ -975,52 +958,14 @@ shared ({ caller = _owner }) actor class Token(
   public query func get_fee_breakdown() : async {
     ckbtc_ledger_fee : Nat;
     canister_withdraw_fee : Nat;
-    sgldt_transfer_fee : Nat;
+    sats_transfer_fee : Nat;
   } {
     {
-      ckbtc_ledger_fee = ckbtc_transaction_fee; // 0.1 GLDT
-      canister_withdraw_fee = ckbtc_conversion_fee; // 0.2 sGLDT
-      sgldt_transfer_fee = 1_000; // 0.00001 sGLDT
+      ckbtc_ledger_fee = ckbtc_transaction_fee; // raw ckBTC, charged by the ckBTC ledger
+      canister_withdraw_fee = ckbtc_conversion_fee; // raw ckBTC, protocol revenue
+      sats_transfer_fee = sats_transaction_fee; // raw SATS, this ledger's own fee
     };
   };
-
-  /* /// Uncomment this code to establish have icrc1 notify you when a transaction has occured.
-  private func transfer_listener(trx: ICRC1.Transaction, trxid: Nat) : () {
-
-  };
-
-  /// Uncomment this code to establish have icrc1 notify you when a transaction has occured.
-  private func approval_listener(trx: ICRC2.TokenApprovalNotification, trxid: Nat) : () {
-
-  };
-
-  /// Uncomment this code to establish have icrc1 notify you when a transaction has occured.
-  private func transfer_from_listener(trx: ICRC2.TransferFromNotification, trxid: Nat) : () {
-
-  }; */
-
-  // private stable var _init = false;
-  // public shared(msg) func admin_init() : async () {
-  //   //can only be called once
-
-  //   if(_init == false){
-  //     //ensure metadata has been registered
-  //     let test1 = icrc1().metadata();
-  //     let test2 = icrc2().metadata();
-  //     let test4 = icrc4().metadata();
-  //     let test3 = icrc3().stats();
-
-  //     //uncomment the following line to register the transfer_listener
-  //     //icrc1().register_token_transferred_listener("my_namespace", transfer_listener);
-
-  //     //uncomment the following line to register the transfer_listener
-  //     //icrc2().register_token_approved_listener("my_namespace", approval_listener);
-
-  //     //uncomment the following line to register the transfer_listener
-  //     //icrc1().register_transfer_from_listener("my_namespace", transfer_from_listener);
-  //   };
-  //   _init := true;
-  // };
 
   let log = Buffer.Buffer<Text>(1);
 
@@ -1031,7 +976,7 @@ shared ({ caller = _owner }) actor class Token(
     log.clear();
   };
 
-  public query (msg) func get_log() : async [Text] {
+  public query func get_log() : async [Text] {
     Buffer.toArray(log);
   };
 
@@ -1066,17 +1011,7 @@ shared ({ caller = _owner }) actor class Token(
   system func postupgrade() {
     ignore icrc1().init_metadata();
   };
-  //re wire up the listener after upgrade
-  //uncomment the following line to register the transfer_listener
-  //icrc1().register_token_transferred_listener("gldtminter", transfer_listener);
 
-  //uncomment the following line to register the transfer_listener
-  //icrc2().register_token_approved_listener("my_namespace", approval_listener);
-
-  //uncomment the following line to register the transfer_listener
-  //icrc1().register_transfer_from_listener("my_namespace", transfer_from_listener);
-
-  // NEW ICRC-106 INDEX CANISTER FUNCTIONS (Phase 3)
   public shared({caller}) func icrc106_set_index_canister(index_canister : Principal) : async Result.Result<(), Text> {
     if (caller != owner) {
       return #err("Unauthorized");
@@ -1099,51 +1034,4 @@ shared ({ caller = _owner }) actor class Token(
     #ok(());
   };
 
-  // NEW ARCHIVE UPGRADE FUNCTIONS (Phase 4)
-  public shared({caller}) func upgrade_archives() : async Result.Result<(), Text> {
-    if (caller != owner) {
-      return #err("Unauthorized");
-    };
-    
-    if (upgradeComplete) {
-      return #err("Archive upgrade already completed");
-    };
-    
-    try {
-      log.add(debug_show (Time.now()) # " Starting archive upgrade...");
-      
-      // Get current archive stats
-      let current_stats = icrc3().stats();
-      log.add(debug_show (Time.now()) # " Current archive stats: " # debug_show(current_stats));
-      
-      // Archive upgrade functionality will be implemented in future phases
-      log.add(debug_show (Time.now()) # " Archive upgrade functionality ready");
-      
-      upgradeComplete := true;
-      log.add(debug_show (Time.now()) # " Archive upgrade completed successfully");
-      
-      #ok(());
-    } catch (error) {
-      upgradeError := "Archive upgrade failed: " # Error.message(error);
-      log.add(debug_show (Time.now()) # " " # upgradeError);
-      #err(upgradeError);
-    };
-  };
-
-  public query func get_upgrade_status() : async {upgradeComplete : Bool; upgradeError : Text} {
-    {
-      upgradeComplete = upgradeComplete;
-      upgradeError = upgradeError;
-    };
-  };
-
-  public shared({caller}) func reset_upgrade_status() : async Result.Result<(), Text> {
-    if (caller != owner) {
-      return #err("Unauthorized");
-    };
-    upgradeComplete := false;
-    upgradeError := "";
-    log.add(debug_show (Time.now()) # " Upgrade status reset");
-    #ok(());
-  };
 };
