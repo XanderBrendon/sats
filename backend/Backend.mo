@@ -1,29 +1,28 @@
-import Buffer "mo:base/Buffer";
-import Error "mo:base/Error";
-import D "mo:base/Debug";
-import ExperimentalCycles "mo:base/ExperimentalCycles";
-import Result "mo:base/Result";
+import Array "mo:core/Array";
+import Blob "mo:core/Blob";
+import Cycles "mo:core/Cycles";
+import Error "mo:core/Error";
+import Int "mo:core/Int";
+import List "mo:core/List";
+import Map "mo:core/Map";
+import Nat "mo:core/Nat";
+import Principal "mo:core/Principal";
+import Result "mo:core/Result";
+import Runtime "mo:core/Runtime";
+import Time "mo:core/Time";
+import Timer "mo:core/Timer";
 
-import Principal "mo:base/Principal";
-import Time "mo:base/Time";
-import Timer "mo:base/Timer";
-
-import Nat64 "mo:base/Nat64";
-import CertTree "mo:cert/CertTree";
-
+import ClassPlus "mo:class-plus";
 import ICRC1 "mo:icrc1-mo/ICRC1";
 import ICRC2 "mo:icrc2-mo/ICRC2";
 import ICRC3 "mo:icrc3-mo/";
-import ICRC3Legacy "mo:icrc3-mo/legacy";
 import ICRC4 "mo:icrc4-mo/ICRC4";
-import ClassPlus "mo:class-plus";
+import TT "mo:timer-tool";
 
-import Blob "mo:base/Blob";
-import Int "mo:base/Int";
 import CkBtcLedger "CkBtcLedger";
 import Convert "Convert";
 
-shared ({ caller = _owner }) actor class Token(
+shared ({ caller = _owner }) persistent actor class Token(
   args : ?{
     icrc1 : ?ICRC1.InitArgs;
     icrc2 : ?ICRC2.InitArgs;
@@ -32,12 +31,14 @@ shared ({ caller = _owner }) actor class Token(
   }
 ) = this {
 
-  let Ledger : CkBtcLedger.Service = actor ("mxzaz-hqaaa-aaaar-qaada-cai");
+  transient let Ledger : CkBtcLedger.Service = actor ("mxzaz-hqaaa-aaaar-qaada-cai");
+
+  transient let ICRC3_SPEC_URL = "https://github.com/dfinity/ICRC-1/tree/main/standards/ICRC-3";
 
   // Conversion between raw ckBTC and raw SATS lives in Convert.mo so it can be
   // unit-tested; see backend/tests/Convert.test.mo.
 
-  let default_icrc1_args : ICRC1.InitArgs = {
+  transient let default_icrc1_args : ICRC1.InitArgs = {
     name = ?"Sat - 1 Satoshi";
     symbol = ?"SATS";
     logo = ?"data:image/png;base64,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";
@@ -66,16 +67,24 @@ shared ({ caller = _owner }) actor class Token(
     settle_to_accounts = ?99999000;
   };
 
-  let default_icrc2_args : ICRC2.InitArgs = {
+  transient let default_icrc2_args : ICRC2.InitArgs = {
     max_approvals_per_account = ?10000;
     max_allowance = ? #TotalSupply;
     fee = ? #ICRC1;
     advanced_settings = null;
     max_approvals = ?10000000;
     settle_to_approvals = ?9990000;
+    cleanup_interval = null;
+    cleanup_on_zero_balance = null;
+    icrc103_max_take_value = null;
+    // ICRC-2 in 0.2.1 gained these ICRC-103 knobs. This canister exposes no
+    // ICRC-103 endpoint, and the library default advertises
+    // `icrc103:public_allowances = true` in metadata, which would be a claim
+    // that anyone may read anyone's allowances. Say no explicitly.
+    icrc103_public_allowances = ?false;
   };
 
-  let default_icrc3_args : ICRC3.InitArgs = {
+  transient let default_icrc3_args : ICRC3.InitArgs = {
     maxActiveRecords = 3000;
     settleToRecords = 2000;
     maxRecordsInArchiveInstance = 500_000;
@@ -85,36 +94,21 @@ shared ({ caller = _owner }) actor class Token(
     archiveCycles = 6_000_000_000_000;
     archiveControllers = null; // Single optional, not double optional
     supportedBlocks = [
-      {
-        block_type = "1xfer";
-        url = "https://github.com/dfinity/ICRC-1/tree/main/standards/ICRC-3";
-      },
-      {
-        block_type = "2xfer";
-        url = "https://github.com/dfinity/ICRC-1/tree/main/standards/ICRC-3";
-      },
-      {
-        block_type = "2approve";
-        url = "https://github.com/dfinity/ICRC-1/tree/main/standards/ICRC-3";
-      },
-      {
-        block_type = "1mint";
-        url = "https://github.com/dfinity/ICRC-1/tree/main/standards/ICRC-3";
-      },
-      {
-        block_type = "1burn";
-        url = "https://github.com/dfinity/ICRC-1/tree/main/standards/ICRC-3";
-      },
+      { block_type = "1xfer"; url = ICRC3_SPEC_URL },
+      { block_type = "2xfer"; url = ICRC3_SPEC_URL },
+      { block_type = "2approve"; url = ICRC3_SPEC_URL },
+      { block_type = "1mint"; url = ICRC3_SPEC_URL },
+      { block_type = "1burn"; url = ICRC3_SPEC_URL },
     ];
   };
 
-  let default_icrc4_args : ICRC4.InitArgs = {
+  transient let default_icrc4_args : ICRC4.InitArgs = {
     max_balances = ?200;
     max_transfers = ?200;
     fee = ? #ICRC1;
   };
 
-  let icrc1_args : ICRC1.InitArgs = switch (args) {
+  transient let icrc1_args : ICRC1.InitArgs = switch (args) {
     case (null) default_icrc1_args;
     case (?args) {
       switch (args.icrc1) {
@@ -138,7 +132,7 @@ shared ({ caller = _owner }) actor class Token(
     };
   };
 
-  let icrc2_args : ICRC2.InitArgs = switch (args) {
+  transient let icrc2_args : ICRC2.InitArgs = switch (args) {
     case (null) default_icrc2_args;
     case (?args) {
       switch (args.icrc2) {
@@ -148,7 +142,7 @@ shared ({ caller = _owner }) actor class Token(
     };
   };
 
-  let icrc3_args : ICRC3.InitArgs = switch (args) {
+  transient let icrc3_args : ICRC3.InitArgs = switch (args) {
     case (null) default_icrc3_args;
     case (?args) {
       switch (?args.icrc3) {
@@ -158,7 +152,7 @@ shared ({ caller = _owner }) actor class Token(
     };
   };
 
-  let icrc4_args : ICRC4.InitArgs = switch (args) {
+  transient let icrc4_args : ICRC4.InitArgs = switch (args) {
     case (null) default_icrc4_args;
     case (?args) {
       switch (args.icrc4) {
@@ -168,195 +162,214 @@ shared ({ caller = _owner }) actor class Token(
     };
   };
 
-  stable let icrc1_migration_state = ICRC1.init(ICRC1.initialState(), #v0_1_0(#id), ?icrc1_args, _owner);
-  stable let icrc2_migration_state = ICRC2.init(ICRC2.initialState(), #v0_1_0(#id), ?icrc2_args, _owner);
-  stable let icrc4_migration_state = ICRC4.init(ICRC4.initialState(), #v0_1_0(#id), ?icrc4_args, _owner);
-  stable let icrc3_migration_state = ICRC3.initialState();
-  stable let cert_store : CertTree.Store = CertTree.newStore();
-  let ct = CertTree.Ops(cert_store);
+  // Ledger state. Under enhanced orthogonal persistence every actor-level
+  // binding without `transient` is stable, so these persist across upgrades and
+  // the ClassPlus `onStorageChange` callbacks below write straight into them.
+  var icrc1_migration_state : ICRC1.State = ICRC1.initialState();
+  var icrc2_migration_state : ICRC2.State = ICRC2.initialState();
+  var icrc3_migration_state : ICRC3.State = ICRC3.initialState();
+  var icrc4_migration_state : ICRC4.State = ICRC4.initialState();
+  let cert_store : ICRC3.CertTree.Store = ICRC3.CertTree.newStore();
 
-  stable var icrc3_migration_state_new = icrc3_migration_state;
+  transient let ct = ICRC3.CertTree.Ops(cert_store);
 
-  let manager = ClassPlus.ClassPlusInitializationManager(_owner, Principal.fromActor(this), true);
+  transient let manager = ClassPlus.ClassPlusInitializationManager<system>(_owner, Principal.fromActor(this), true);
 
-  stable var owner = _owner;
-  stable var accumulated_fees : Nat = 0;
-  stable var fee_collector : Principal = _owner;
-  stable var authorized_fee_collector : Principal = Principal.fromText("ok64y-uiaaa-aaaag-qdcbq-cai");
-  stable var total_withdraw_fees : Nat = 0;
-  stable var total_ledger_fees : Nat = 0;
+  var owner = _owner;
+  var accumulated_fees : Nat = 0;
+  var fee_collector : Principal = _owner;
+  var authorized_fee_collector : Principal = Principal.fromText("ok64y-uiaaa-aaaag-qdcbq-cai");
+  var total_withdraw_fees : Nat = 0;
+  var total_ledger_fees : Nat = 0;
 
   // Both denominated in RAW ckBTC.
-  stable var ckbtc_transaction_fee : Nat = 10; // the ckBTC ledger's own fee
-  stable var ckbtc_conversion_fee : Nat = 5; // protocol revenue
+  var ckbtc_transaction_fee : Nat = 10; // the ckBTC ledger's own fee
+  var ckbtc_conversion_fee : Nat = 5; // protocol revenue
 
-  stable var sats_transaction_fee : Nat = 100; // must match the icrc1 fee above
+  var sats_transaction_fee : Nat = 100; // must match the icrc1 fee above
 
-  stable var icrc106IndexCanister : ?Principal = null;
+  var icrc106IndexCanister : ?Principal = null;
 
-  private var _icrc1 : ?ICRC1.ICRC1 = null;
+  // The 0.2.x ICRC libraries added ICRC-85 "Open Value Sharing", which donates
+  // cycles to the library authors on a timer. The pre-migration libraries had no
+  // such mechanism, so it is switched off here to preserve behaviour -- flip
+  // these to `?false` (or drop `advanced`) to opt in.
+  //
+  // The TimerTool itself is NOT optional: each library builds an OVS instance
+  // whose constructor traps with "TimerTool required on environment" when this
+  // is null, regardless of the kill switch, which is only consulted later when
+  // the scheduled share action runs.
+  var tt_migration_state : TT.State = TT.initialState();
 
-  private func get_icrc1_environment() : ICRC1.Environment {
-    {
-      get_time = null;
-      get_fee = null;
-      add_ledger_transaction = ?icrc3().add_record;
+  transient let tt = TT.Init({
+    org_icdevs_class_plus_manager = manager;
+    initialState = tt_migration_state;
+    args = null;
+    pullEnvironment = TT.PullDefaultEnvironment;
+    onInitialize = null;
+    onStorageChange = func(state : TT.State) {
+      tt_migration_state := state;
     };
-  };
+  });
 
-  func icrc1() : ICRC1.ICRC1 {
-    switch (_icrc1) {
-      case (null) {
-        let initclass : ICRC1.ICRC1 = ICRC1.ICRC1(?icrc1_migration_state, Principal.fromActor(this), get_icrc1_environment());
-        ignore initclass.register_supported_standards({
-          name = "ICRC-3";
-          url = "https://github.com/dfinity/ICRC/ICRCs/icrc-3/";
-        });
-        ignore initclass.register_supported_standards({
-          name = "ICRC-10";
-          url = "https://github.com/dfinity/ICRC/ICRCs/icrc-10/";
-        });
+  transient let ovs_disabled = { kill_switch = ?true; handler = null; tree = null };
 
-        ignore initclass.register_supported_standards({
-          name = "ICRC-103";
-          url = "https://github.com/dfinity/ICRC/blob/main/ICRCs/ICRC-103"
-        });
-        ignore initclass.register_supported_standards({
-          name = "ICRC-106";
-          url = "https://github.com/dfinity/ICRC/blob/main/ICRCs/ICRC-106"
-        });
-        ignore initclass.register_supported_standards({
-          name = "ICRC-130";
-          url = "https://github.com/dfinity/ICRC/blob/main/ICRCs/ICRC-130"
-        });
-        ignore initclass.register_supported_standards({
-          name = "ICRC-4";
-          url = "https://github.com/dfinity/ICRC/blob/main/ICRCs/ICRC-4"
-        });
-        
-        _icrc1 := ?initclass;
-        initclass;
-      };
-      case (?val) val;
-    };
-  };
+  // --- ICRC-3 ---------------------------------------------------------------
+  // Declared first: the ICRC-1 environment below pulls `icrc3().add_record`.
 
-  private var _icrc2 : ?ICRC2.ICRC2 = null;
-
-  private func get_icrc2_environment() : ICRC2.Environment {
-    {
-      icrc1 = icrc1();
-      get_fee = null;
-    };
-  };
-
-  func icrc2() : ICRC2.ICRC2 {
-    switch (_icrc2) {
-      case (null) {
-        let initclass : ICRC2.ICRC2 = ICRC2.ICRC2(?icrc2_migration_state, Principal.fromActor(this), get_icrc2_environment());
-        _icrc2 := ?initclass;
-        initclass;
-      };
-      case (?val) val;
-    };
-  };
-
-  private var _icrc4 : ?ICRC4.ICRC4 = null;
-
-  private func get_icrc4_environment() : ICRC4.Environment {
-    {
-      icrc1 = icrc1();
-      get_fee = null;
-    };
-  };
-
-  func icrc4() : ICRC4.ICRC4 {
-    switch (_icrc4) {
-      case (null) {
-        let initclass : ICRC4.ICRC4 = ICRC4.ICRC4(?icrc4_migration_state, Principal.fromActor(this), get_icrc4_environment());
-        _icrc4 := ?initclass;
-        initclass;
-      };
-      case (?val) val;
-    };
-  };
-
-  private func updated_certification(_cert : Blob, _lastIndex : Nat) : Bool {
+  func updated_certification(_cert : Blob, _lastIndex : Nat) : Bool {
     ct.setCertifiedData();
     return true;
   };
 
-  private func get_certificate_store() : CertTree.Store {
+  func get_certificate_store() : ICRC3.CertTree.Store {
     return cert_store;
   };
 
-  private func get_icrc3_environment() : ICRC3.Environment {
+  func get_icrc3_environment() : ICRC3.Environment {
     {
-      updated_certification = ?updated_certification;
+      advanced = ?{
+        updated_certification = ?updated_certification;
+        icrc85 = ?{
+          var org_icdevs_timer_tool = ?tt();
+          var collector = null;
+          advanced = ?ovs_disabled;
+        };
+      };
       get_certificate_store = ?get_certificate_store;
+      var org_icdevs_timer_tool = ?tt();
     };
   };
 
   func ensure_block_types(icrc3Class : ICRC3.ICRC3) : () {
-    let supportedBlocks = Buffer.fromIter<ICRC3.BlockType>(icrc3Class.supported_block_types().vals());
+    let supportedBlocks = List.fromArray<ICRC3.BlockType>(icrc3Class.supported_block_types());
 
-    let blockequal = func(a : { block_type : Text }, b : { block_type : Text }) : Bool {
-      a.block_type == b.block_type;
+    for (blockType in ["1xfer", "2xfer", "2approve", "1mint", "1burn"].values()) {
+      let present = supportedBlocks.find(
+        func(candidate : ICRC3.BlockType) : Bool { candidate.block_type == blockType }
+      ) != null;
+
+      if (not present) {
+        supportedBlocks.add({ block_type = blockType; url = ICRC3_SPEC_URL });
+      };
     };
 
-    if (Buffer.indexOf<ICRC3.BlockType>({ block_type = "1xfer"; url = "" }, supportedBlocks, blockequal) == null) {
-      supportedBlocks.add({
-        block_type = "1xfer";
-        url = "https://github.com/dfinity/ICRC-1/tree/main/standards/ICRC-3";
-      });
-    };
-
-    if (Buffer.indexOf<ICRC3.BlockType>({ block_type = "2xfer"; url = "" }, supportedBlocks, blockequal) == null) {
-      supportedBlocks.add({
-        block_type = "2xfer";
-        url = "https://github.com/dfinity/ICRC-1/tree/main/standards/ICRC-3";
-      });
-    };
-
-    if (Buffer.indexOf<ICRC3.BlockType>({ block_type = "2approve"; url = "" }, supportedBlocks, blockequal) == null) {
-      supportedBlocks.add({
-        block_type = "2approve";
-        url = "https://github.com/dfinity/ICRC-1/tree/main/standards/ICRC-3";
-      });
-    };
-
-    if (Buffer.indexOf<ICRC3.BlockType>({ block_type = "1mint"; url = "" }, supportedBlocks, blockequal) == null) {
-      supportedBlocks.add({
-        block_type = "1mint";
-        url = "https://github.com/dfinity/ICRC-1/tree/main/standards/ICRC-3";
-      });
-    };
-
-    if (Buffer.indexOf<ICRC3.BlockType>({ block_type = "1burn"; url = "" }, supportedBlocks, blockequal) == null) {
-      supportedBlocks.add({
-        block_type = "1burn";
-        url = "https://github.com/dfinity/ICRC-1/tree/main/standards/ICRC-3";
-      });
-    };
-
-    icrc3Class.update_supported_blocks(Buffer.toArray(supportedBlocks));
+    icrc3Class.update_supported_blocks(supportedBlocks.toArray());
   };
 
-  let icrc3 = ICRC3.Init<system>({
-    manager = manager;
-    initialState = icrc3_migration_state_new;
+  transient let icrc3 = ICRC3.Init({
+    org_icdevs_class_plus_manager = manager;
+    initialState = icrc3_migration_state;
     args = ?icrc3_args;
     pullEnvironment = ?get_icrc3_environment;
-    onInitialize = ?(func(newClass : ICRC3.ICRC3) : async*() {
-      ensure_block_types(newClass);
-    });
+    onInitialize = ?(
+      func(newClass : ICRC3.ICRC3) : async* () {
+        ensure_block_types(newClass);
+      }
+    );
     onStorageChange = func(state : ICRC3.State) {
-      icrc3_migration_state_new := state;
+      icrc3_migration_state := state;
     };
   });
 
+  // --- ICRC-1 ---------------------------------------------------------------
 
+  func get_icrc1_environment() : ICRC1.Environment {
+    {
+      advanced = ?{
+        icrc85 = {
+          kill_switch = ?true;
+          handler = null;
+          tree = null;
+          collector = null;
+          advanced = ?ovs_disabled;
+        };
+        get_fee = null;
+        fee_validation_mode = null;
+      };
+      add_ledger_transaction = ?icrc3().add_record;
+      var org_icdevs_timer_tool = ?tt();
+      var org_icdevs_class_plus_manager = null;
+    };
+  };
 
+  transient let icrc1 = ICRC1.Init({
+    org_icdevs_class_plus_manager = manager;
+    initialState = icrc1_migration_state;
+    args = ?icrc1_args;
+    pullEnvironment = ?get_icrc1_environment;
+    onInitialize = ?(
+      func(newClass : ICRC1.ICRC1) : async* () {
+        ignore newClass.register_supported_standards({
+          name = "ICRC-3";
+          url = "https://github.com/dfinity/ICRC/ICRCs/icrc-3/";
+        });
+        ignore newClass.register_supported_standards({
+          name = "ICRC-10";
+          url = "https://github.com/dfinity/ICRC/ICRCs/icrc-10/";
+        });
+        ignore newClass.register_supported_standards({
+          name = "ICRC-103";
+          url = "https://github.com/dfinity/ICRC/blob/main/ICRCs/ICRC-103";
+        });
+        ignore newClass.register_supported_standards({
+          name = "ICRC-106";
+          url = "https://github.com/dfinity/ICRC/blob/main/ICRCs/ICRC-106";
+        });
+        ignore newClass.register_supported_standards({
+          name = "ICRC-130";
+          url = "https://github.com/dfinity/ICRC/blob/main/ICRCs/ICRC-130";
+        });
+        ignore newClass.register_supported_standards({
+          name = "ICRC-4";
+          url = "https://github.com/dfinity/ICRC/blob/main/ICRCs/ICRC-4";
+        });
+      }
+    );
+    onStorageChange = func(state : ICRC1.State) {
+      icrc1_migration_state := state;
+    };
+  });
+
+  // --- ICRC-2 ---------------------------------------------------------------
+
+  func get_icrc2_environment() : ICRC2.Environment {
+    {
+      icrc1 = icrc1();
+      get_fee = null;
+    };
+  };
+
+  transient let icrc2 = ICRC2.Init({
+    org_icdevs_class_plus_manager = manager;
+    initialState = icrc2_migration_state;
+    args = ?icrc2_args;
+    pullEnvironment = ?get_icrc2_environment;
+    onInitialize = null;
+    onStorageChange = func(state : ICRC2.State) {
+      icrc2_migration_state := state;
+    };
+  });
+
+  // --- ICRC-4 ---------------------------------------------------------------
+
+  func get_icrc4_environment() : ICRC4.Environment {
+    {
+      icrc1 = icrc1();
+      get_fee = null;
+    };
+  };
+
+  transient let icrc4 = ICRC4.Init({
+    org_icdevs_class_plus_manager = manager;
+    initialState = icrc4_migration_state;
+    args = ?icrc4_args;
+    pullEnvironment = ?get_icrc4_environment;
+    onInitialize = null;
+    onStorageChange = func(state : ICRC4.State) {
+      icrc4_migration_state := state;
+    };
+  });
 
   /// Functions for the ICRC1 token standard
   public shared query func icrc1_name() : async Text {
@@ -404,32 +417,37 @@ shared ({ caller = _owner }) actor class Token(
     // a transfer is a burn: the tokens are destroyed and no ckBTC comes back.
     // Callers must use withdraw() to unwrap. Without this guard the loss is
     // silent and irreversible.
-    switch (await* icrc1().transfer_tokens(caller, args, false,
-      ?#Sync(
-        func<system>(
-          trx : ICRC1.Value,
-          trxtop : ?ICRC1.Value,
-          notification : ICRC1.TransactionRequestNotification,
-        ) : Result.Result<(ICRC1.Value, ?ICRC1.Value, ICRC1.TransactionRequestNotification), Text> {
-          if (notification.to.owner == Principal.fromActor(this)) {
-            return #err("Cannot transfer to the token canister - this would burn your tokens. Use withdraw() to unwrap.");
-          };
-          #ok((trx, trxtop, notification));
-        }
+    switch (
+      await* icrc1().transfer_tokens(
+        caller,
+        args,
+        false,
+        ?#Sync(
+          func<system>(
+            trx : ICRC1.Value,
+            trxtop : ?ICRC1.Value,
+            notification : ICRC1.TransactionRequestNotification,
+          ) : Result.Result<(ICRC1.Value, ?ICRC1.Value, ICRC1.TransactionRequestNotification), Text> {
+            if (notification.to.owner == Principal.fromActor(this)) {
+              return #err("Cannot transfer to the token canister - this would burn your tokens. Use withdraw() to unwrap.");
+            };
+            #ok((trx, trxtop, notification));
+          }
+        ),
       )
-    )) {
+    ) {
       case (#trappable(val)) val;
       case (#awaited(val)) val;
-      case (#err(#trappable(err))) D.trap(err);
-      case (#err(#awaited(err))) D.trap(err);
+      case (#err(#trappable(err))) Runtime.trap(err);
+      case (#err(#awaited(err))) Runtime.trap(err);
     };
   };
 
-  private func time64() : Nat64 {
-    Nat64.fromNat(Int.abs(Time.now()));
+  func time64() : Nat64 {
+    Nat.toNat64(Int.abs(Time.now()));
   };
 
-  private func refund(caller : Principal, subaccount : ?[Nat8], amount : Nat, e : Text) : async* Result.Result<(Nat, Nat), Text> {
+  func refund(caller : Principal, subaccount : ?[Nat8], amount : Nat, e : Text) : async* Result.Result<(Nat, Nat), Text> {
     let result = try {
       await Ledger.icrc1_transfer({
         from_subaccount = null;
@@ -491,13 +509,13 @@ shared ({ caller = _owner }) actor class Token(
       });
     } catch (e) {
       log.add(debug_show (Time.now()) # "trying transfer from " # Error.message(e));
-      D.trap("cannot transfer from failed" # Error.message(e));
+      Runtime.trap("cannot transfer from failed" # Error.message(e));
     };
 
     let block = switch (result) {
       case (#Ok(block)) block;
       case (#Err(err)) {
-        D.trap("cannot transfer from failed" # debug_show (err));
+        Runtime.trap("cannot transfer from failed" # debug_show (err));
       };
     };
 
@@ -514,7 +532,7 @@ shared ({ caller = _owner }) actor class Token(
           owner = caller;
           subaccount = switch (subaccount) {
             case (null) null;
-            case (?val) ?Blob.fromArray(val);
+            case (?val) ?Array.toBlob(val);
           };
         };
         amount = mintingAmount; // The number of tokens to mint.
@@ -565,7 +583,7 @@ shared ({ caller = _owner }) actor class Token(
       {
         from_subaccount = switch (subaccount) {
           case (null) null;
-          case (?val) ?Blob.fromArray(val);
+          case (?val) ?Array.toBlob(val);
         }; // The subaccount from which tokens are burned.
         amount = burn_amount; // whole satoshis only; the remainder stays with the caller
         memo = ?("\28\d8\70\88\d3\94\fc\6d\5d\f7\4d\f9\86\d2\4e\2c\e0\63\29\b2\39\57\06\a2\9c\fb\69\8e\93\18\b2\8e" : Blob); // sha256("SATS Withdraw")
@@ -579,17 +597,16 @@ shared ({ caller = _owner }) actor class Token(
     };
 
     let transferResult = await Ledger.icrc1_transfer({
-        to = {
-          owner = caller;
-          subaccount = subaccount;
-        };
-        fee = null;
-        from_subaccount = null;
-        memo = ?Blob.toArray("\28\d8\70\88\d3\94\fc\6d\5d\f7\4d\f9\86\d2\4e\2c\e0\63\29\b2\39\57\06\a2\9c\fb\69\8e\93\18\b2\8e"); // sha256("SATS Withdraw")
-        created_at_time = ?time64();
-        amount = gross_ckbtc - ckbtc_total_fee; // raw ckBTC out
-      },
-    );
+      to = {
+        owner = caller;
+        subaccount = subaccount;
+      };
+      fee = null;
+      from_subaccount = null;
+      memo = ?Blob.toArray("\28\d8\70\88\d3\94\fc\6d\5d\f7\4d\f9\86\d2\4e\2c\e0\63\29\b2\39\57\06\a2\9c\fb\69\8e\93\18\b2\8e"); // sha256("SATS Withdraw")
+      created_at_time = ?time64();
+      amount = gross_ckbtc - ckbtc_total_fee; // raw ckBTC out
+    });
 
     let block = switch (transferResult) {
       case (#Ok(block)) {
@@ -639,7 +656,7 @@ shared ({ caller = _owner }) actor class Token(
               owner = caller;
               subaccount = switch (subaccount) {
                 case (null) null;
-                case (?val) ?Blob.fromArray(val);
+                case (?val) ?Array.toBlob(val);
               }; // The subaccount from which tokens are burned.
             };
             amount = burn_amount; // must match exactly what was burned
@@ -678,13 +695,13 @@ shared ({ caller = _owner }) actor class Token(
   public query func stats() : async Stats {
     return {
       totalSupply = icrc1().total_supply();
-      holders = ICRC1.Map.size(icrc1().get_state().accounts);
+      holders = icrc1().get_state().accounts.size();
     };
   };
 
   public query func holders(min : ?Nat, max : ?Nat, prev : ?ICRC1.Account, take : ?Nat) : async [(ICRC1.Account, Nat)] {
 
-    let results = ICRC1.Vector.new<(ICRC1.Account, Nat)>();
+    let results = List.empty<(ICRC1.Account, Nat)>();
     let (bFound_, targetAccount) = switch (prev) {
       case (null)(true, { owner = Principal.fromActor(this); subaccount = null });
       case (?val)(false, val);
@@ -692,14 +709,11 @@ shared ({ caller = _owner }) actor class Token(
 
     var bFound : Bool = bFound_;
 
-    let takeVal = switch (take) {
-      case (null) 1000; //default take
-      case (?val) val;
-    };
+    let takeVal = take ?? 1000; //default take
 
-    label search for (thisAccount in ICRC1.Map.entries(icrc1().get_state().accounts)) {
+    label search for (thisAccount in icrc1().get_state().accounts.entries()) {
       if (bFound) {
-        if (ICRC1.Vector.size(results) >= takeVal) {
+        if (results.size() >= takeVal) {
           break search;
         };
 
@@ -710,18 +724,12 @@ shared ({ caller = _owner }) actor class Token(
           continue search;
         };
       };
-      let minSearch = switch (min) {
-        case (null) 0;
-        case (?val) val;
-      };
-      let maxSearch = switch (max) {
-        case (null) 20_000_000_0000_0000; //our max supply is far less than 20M
-        case (?val) val;
-      };
-      if (thisAccount.1 >= minSearch and thisAccount.1 <= maxSearch) ICRC1.Vector.add(results, (thisAccount.0, thisAccount.1));
+      let minSearch = min ?? 0;
+      let maxSearch = max ?? 20_000_000_0000_0000; //our max supply is far less than 20M
+      if (thisAccount.1 >= minSearch and thisAccount.1 <= maxSearch) results.add((thisAccount.0, thisAccount.1));
     };
 
-    return ICRC1.Vector.toArray(results);
+    return results.toArray();
   };
 
   public query func icrc2_allowance(args : ICRC2.AllowanceArgs) : async ICRC2.Allowance {
@@ -732,8 +740,8 @@ shared ({ caller = _owner }) actor class Token(
     switch (await* icrc2().approve_transfers(caller, args, false, null)) {
       case (#trappable(val)) val;
       case (#awaited(val)) val;
-      case (#err(#trappable(err))) D.trap(err);
-      case (#err(#awaited(err))) D.trap(err);
+      case (#err(#trappable(err))) Runtime.trap(err);
+      case (#err(#awaited(err))) Runtime.trap(err);
     };
   };
 
@@ -741,8 +749,8 @@ shared ({ caller = _owner }) actor class Token(
     switch (await* icrc2().transfer_tokens_from(caller, args, null)) {
       case (#trappable(val)) val;
       case (#awaited(val)) val;
-      case (#err(#trappable(err))) D.trap(err);
-      case (#err(#awaited(err))) D.trap(err);
+      case (#err(#trappable(err))) Runtime.trap(err);
+      case (#err(#awaited(err))) Runtime.trap(err);
     };
   };
 
@@ -766,7 +774,7 @@ shared ({ caller = _owner }) actor class Token(
     return icrc3().get_tip();
   };
 
-  public query func get_transactions(args: { start : Nat; length : Nat }) : async ICRC3Legacy.GetTransactionsResponse {
+  public query func get_transactions(args : { start : Nat; length : Nat }) : async ICRC3.Legacy.GetTransactionsResponse {
     let results = icrc3().get_blocks_legacy(args);
     return {
       first_index = icrc3().get_state().firstIndex;
@@ -798,66 +806,70 @@ shared ({ caller = _owner }) actor class Token(
   };
 
   public shared ({ caller }) func admin_update_owner(new_owner : Principal) : async Bool {
-    if (caller != owner) { D.trap("Unauthorized") };
+    if (caller != owner) { Runtime.trap("Unauthorized") };
     owner := new_owner;
     return true;
   };
 
   public shared ({ caller }) func admin_update_icrc1(requests : [ICRC1.UpdateLedgerInfoRequest]) : async [Bool] {
-    if (caller != owner) { D.trap("Unauthorized") };
+    if (caller != owner) { Runtime.trap("Unauthorized") };
     return icrc1().update_ledger_info(requests);
   };
 
   public shared ({ caller }) func admin_update_icrc2(requests : [ICRC2.UpdateLedgerInfoRequest]) : async [Bool] {
-    if (caller != owner) { D.trap("Unauthorized") };
+    if (caller != owner) { Runtime.trap("Unauthorized") };
     return icrc2().update_ledger_info(requests);
   };
 
   public shared ({ caller }) func admin_update_icrc4(requests : [ICRC4.UpdateLedgerInfoRequest]) : async [Bool] {
-    if (caller != owner) { D.trap("Unauthorized") };
+    if (caller != owner) { Runtime.trap("Unauthorized") };
     return icrc4().update_ledger_info(requests);
   };
 
   // Fee collection functions
   public shared ({ caller }) func admin_update_fee_collector(new_collector : Principal) : async Bool {
-    if (caller != owner) { D.trap("Unauthorized") };
+    if (caller != owner) { Runtime.trap("Unauthorized") };
     fee_collector := new_collector;
     return true;
   };
 
   public shared ({ caller }) func admin_update_authorized_fee_collector(new_collector : Principal) : async Bool {
-    if (caller != owner) { D.trap("Unauthorized") };
+    if (caller != owner) { Runtime.trap("Unauthorized") };
     authorized_fee_collector := new_collector;
     return true;
   };
 
   public shared ({ caller }) func admin_update_ckbtc_transaction_fee(new_fee : Nat) : async Bool {
-    if (caller != owner) { D.trap("Unauthorized") };
+    if (caller != owner) { Runtime.trap("Unauthorized") };
     ckbtc_transaction_fee := new_fee;
     return true;
   };
 
   public shared ({ caller }) func admin_update_ckbtc_conversion_fee(new_fee : Nat) : async Bool {
-    if (caller != owner) { D.trap("Unauthorized") };
+    if (caller != owner) { Runtime.trap("Unauthorized") };
     ckbtc_conversion_fee := new_fee;
     return true;
   };
 
   public shared ({ caller }) func admin_collect_fees() : async Result.Result<Nat, Text> {
-    if (caller != fee_collector and caller != authorized_fee_collector) { return #err("Unauthorized") };
+    if (caller != fee_collector and caller != authorized_fee_collector) {
+      return #err("Unauthorized");
+    };
     let this_pid = Principal.fromActor(this);
-    let fees = icrc1().balance_of({owner = this_pid; subaccount = null});
-    
+    let fees = icrc1().balance_of({ owner = this_pid; subaccount = null });
+
     if (fees == 0) { return #err("No fees to collect") };
 
-    if (fees <= sats_transaction_fee * 2) { return #err("Not enough fees to collect") };
-    
+    if (fees <= sats_transaction_fee * 2) {
+      return #err("Not enough fees to collect");
+    };
+
     let fees_minus_tx_fees = fees - (sats_transaction_fee * 2);
-    
+
     // Calculate 50/50 split (accounting for odd amounts)
     let half_fees = fees_minus_tx_fees / 2;
     let second_half = fees_minus_tx_fees - half_fees; // This handles odd amounts correctly
-    
+
     // Transfer first half to address 1
     let transfer1_result = try {
       await* icrc1().transfer_tokens(
@@ -872,7 +884,10 @@ shared ({ caller = _owner }) actor class Token(
           memo = ?("\46\65\65\20\43\6f\6c\6c\65\63\74\69\6f\6e" : Blob); // "Fee Collection"
           created_at_time = ?time64();
           amount = half_fees;
-        }, false, null);
+        },
+        false,
+        null,
+      );
     } catch (e) {
       return #err("Failed to transfer first half of fees: " # Error.message(e));
     };
@@ -888,7 +903,7 @@ shared ({ caller = _owner }) actor class Token(
       };
       case (_) {};
     };
-    
+
     // Transfer second half to address 2
     let transfer2_result = try {
       await* icrc1().transfer_tokens(
@@ -903,7 +918,10 @@ shared ({ caller = _owner }) actor class Token(
           memo = ?("\46\65\65\20\43\6f\6c\6c\65\63\74\69\6f\6e" : Blob); // "Fee Collection"
           created_at_time = ?time64();
           amount = second_half;
-        }, false, null);
+        },
+        false,
+        null,
+      );
     } catch (e) {
       return #err("Failed to transfer second half of fees: " # Error.message(e));
     };
@@ -919,12 +937,12 @@ shared ({ caller = _owner }) actor class Token(
       };
       case (_) {};
     };
-    
+
     return #ok(fees);
   };
 
   public query func get_sats_balance() : async Nat {
-    icrc1().balance_of({owner = Principal.fromActor(this); subaccount = null});
+    icrc1().balance_of({ owner = Principal.fromActor(this); subaccount = null });
   };
 
   public query func get_accumulated_fees() : async Nat {
@@ -967,34 +985,37 @@ shared ({ caller = _owner }) actor class Token(
     };
   };
 
-  let log = Buffer.Buffer<Text>(1);
+  // Diagnostic only, and deliberately not persisted: it is rebuilt from empty on
+  // every (re)start, matching the pre-migration Buffer that never survived an
+  // upgrade either.
+  transient let log = List.empty<Text>();
 
   public shared (msg) func clearLog() : async () {
     if (msg.caller != owner) {
-      D.trap("Unauthorized");
+      Runtime.trap("Unauthorized");
     };
     log.clear();
   };
 
   public query func get_log() : async [Text] {
-    Buffer.toArray(log);
+    log.toArray();
   };
 
   // Deposit cycles into this canister.
   public shared func deposit_cycles() : async () {
-    let amount = ExperimentalCycles.available();
-    let accepted = ExperimentalCycles.accept<system>(amount);
+    let amount = Cycles.available();
+    let accepted = Cycles.accept<system>(amount);
     assert (accepted == amount);
   };
 
   public shared (msg) func init() : async () {
     if (Principal.fromActor(this) != msg.caller) {
-      D.trap("Only the canister can initialize the canister");
+      Runtime.trap("Only the canister can initialize the canister");
     };
     log.add(debug_show (Time.now()) # "In init ");
     ignore icrc1().metadata();
     ignore icrc2().metadata();
-    ignore icrc3().stats();
+    ignore icrc3().get_stats();
     ignore icrc4().metadata();
   };
 
@@ -1012,7 +1033,7 @@ shared ({ caller = _owner }) actor class Token(
     ignore icrc1().init_metadata();
   };
 
-  public shared({caller}) func icrc106_set_index_canister(index_canister : Principal) : async Result.Result<(), Text> {
+  public shared ({ caller }) func icrc106_set_index_canister(index_canister : Principal) : async Result.Result<(), Text> {
     if (caller != owner) {
       return #err("Unauthorized");
     };
@@ -1025,7 +1046,7 @@ shared ({ caller = _owner }) actor class Token(
     icrc106IndexCanister;
   };
 
-  public shared({caller}) func icrc106_remove_index_canister() : async Result.Result<(), Text> {
+  public shared ({ caller }) func icrc106_remove_index_canister() : async Result.Result<(), Text> {
     if (caller != owner) {
       return #err("Unauthorized");
     };

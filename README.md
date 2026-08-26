@@ -17,8 +17,14 @@ low-friction transactions for automated processes.
 
 | | Canister ID |
 |---|---|
-| Backend / SATS ledger (production) | `4fu6t-haaaa-aaaap-quxda-cai` |
+| Backend / SATS ledger (production) | assigned on first `icp deploy -e ic` |
 | ckBTC ledger (external) | `mxzaz-hqaaa-aaaar-qaada-cai` |
+
+> The pre-icp-cli deployment has been retired. Moving the ledger libraries to
+> `mo:core` changes the persisted state layout incompatibly, so the new build
+> cannot upgrade those canisters in place — it deploys as a fresh ledger. Once
+> deployed, `icp deploy` records the IDs in `.icp/data/mappings/ic.ids.json`;
+> commit that file.
 
 **The backend canister *is* the SATS ledger.** It embeds `icrc1-mo`, `icrc2-mo`,
 `icrc3-mo` and `icrc4-mo` directly, so one canister serves both the wrapper
@@ -75,29 +81,8 @@ Two calls. Approve the backend to pull your ckBTC, then deposit.
 `deposit(subaccount: opt vec nat8, amount: nat) -> (Result)` — `amount` is in
 **raw ckBTC**.
 
-### dfx
-
 ```bash
-export DFX_WARNING=-mainnet_plaintext_identity
-BACKEND=4fu6t-haaaa-aaaap-quxda-cai
-CKBTC=mxzaz-hqaaa-aaaar-qaada-cai
-
-# 1. approve — must cover the deposit PLUS the 10-raw ckBTC ledger fee
-dfx canister --network ic call $CKBTC icrc2_approve "(record {
-  spender = record { owner = principal \"$BACKEND\"; subaccount = null };
-  amount = 10_010 : nat;
-  fee = null; memo = null; from_subaccount = null;
-  created_at_time = null; expected_allowance = null; expires_at = null;
-})"
-
-# 2. deposit — null subaccount = default
-dfx canister --network ic call $BACKEND deposit '(null, 10_000 : nat)'
-```
-
-### icp
-
-```bash
-BACKEND=4fu6t-haaaa-aaaap-quxda-cai
+BACKEND=<your-backend-canister-id>   # icp canister status backend -e ic --id-only
 CKBTC=mxzaz-hqaaa-aaaar-qaada-cai
 
 icp canister call $CKBTC icrc2_approve "(record {
@@ -123,14 +108,6 @@ One call. No approval needed — `withdraw` burns from the caller's balance dire
 
 `withdraw(subaccount: opt vec nat8, amount: nat) -> (Result)` — `amount` is in
 **raw SATS**.
-
-### dfx
-
-```bash
-dfx canister --network ic call $BACKEND withdraw '(null, 1_600_000_000 : nat)'
-```
-
-### icp
 
 ```bash
 icp canister call $BACKEND withdraw '(null, 1_600_000_000 : nat)' --network ic
@@ -158,18 +135,6 @@ balance. Nothing is lost to rounding.
 
 # Checking balances
 
-### dfx
-
-```bash
-P=<your-principal>
-dfx canister --network ic call $CKBTC icrc1_balance_of \
-  "(record { owner = principal \"$P\"; subaccount = null })" --query
-dfx canister --network ic call $BACKEND icrc1_balance_of \
-  "(record { owner = principal \"$P\"; subaccount = null })" --query
-```
-
-### icp
-
 ```bash
 icp canister call $CKBTC icrc1_balance_of \
   "(record { owner = principal \"$P\"; subaccount = null })" --query --network ic
@@ -186,61 +151,84 @@ icp canister call $BACKEND icrc1_balance_of \
 
 ### Toolchain
 
-**Only dfx 0.28.0 builds this project.** Pin it:
-
 ```bash
-export DFX_VERSION=0.28.0
+npm install -g @icp-sdk/icp-cli @icp-sdk/ic-wasm ic-mops
 ```
 
-dfx 0.31.0 rejects `icrc3-mo@0.3.5` with `M0219` (implicit transient) and
-`M0220` (implicit non-persistent actor); dfx ≤ 0.27.0 fails on `sha2@0.1.4`.
-
-> ⚠️ dfx 0.28.0 publishes **no aarch64 Linux build**. On arm64 machines
-> `dfxvm install 0.28.0` 404s, so the project cannot be built there until the
-> dependencies are moved to versions a current dfx accepts.
+The Motoko compiler is pinned in `mops.toml` (`[toolchain] moc`) and installed
+by `mops`, so the build does not depend on a system-wide compiler and is
+reproducible across machines and architectures.
 
 ### Build and test
 
 ```bash
-npm install                                  # also runs `mops install`
-DFX_VERSION=0.28.0 dfx build --network ic backend
-npx mo-test                                  # conversion arithmetic
+npm install            # also runs `mops install`
+icp build              # both canisters
+npm test               # mops test (conversion arithmetic) + vitest
 ```
 
-### Deploying the frontend
+`mops check` currently fails, but `icp build` and `mops test` do not: `check`
+type-checks every file in every dependency, and two published packages ship
+files that a modern `moc` rejects but that nothing reachable imports
+(`icrc2-mo@0.2.1` has a migration file importing a path that does not exist,
+and an old transitive `base` pin from `star` fails on `ExperimentalCycles`).
+Use `icp build` to verify the backend compiles.
 
-The frontend targets production by default. Build staging explicitly:
+### Running locally
 
 ```bash
-npm run build:staging
+icp network start -d   # local network, on an OS-assigned port
+icp deploy             # build + install + upload assets
+npm start              # Vite dev server on :3000, against the local canisters
+icp network stop
 ```
 
-> ⚠️ `dfx deploy` **re-runs `npm run build` itself** and overwrites `dist/`.
-> Building the staging bundle first is not enough — export the variable for the
-> whole deploy command, or dfx will silently ship a production bundle and report
-> success:
->
-> ```bash
-> export DEPLOY_ENV=staging
-> DFX_VERSION=0.28.0 dfx deploy frontend-staging --network ic
-> ```
->
-> The asset-canister wasm hash is identical for both builds, so module hashes
-> cannot detect a wrong-environment deploy. Verify by fetching the live bundle:
->
-> ```bash
-> curl -s https://<canister>.icp0.io/ | grep -oE '/assets/index-[a-z0-9]+\.js'
-> ```
->
-> and confirming it contains the expected backend canister ID.
+The local network is configured with `gateway.port: 0` (see `icp.yaml`) so it
+never collides with another icp-cli project on port 8000. Nothing hardcodes the
+port — the Vite dev server reads it back from `icp network status --json`, so
+run `icp deploy backend` before `npm start`.
+
+### How the frontend finds the backend
+
+Canister IDs are **not** baked into the bundle. `icp deploy` injects every
+canister's ID into the frontend canister, which serves them in an `ic_env`
+cookie; `src/config.ts` reads that at runtime via `@icp-sdk/core`. The Vite dev
+server synthesises the same cookie from `icp network status` / `icp canister
+status`.
+
+That is why there is no `build:staging` script any more: one bundle is correct
+in every environment, because each deployment serves its own IDs. Staging is an
+`icp.yaml` *environment* rather than a separate set of canisters:
+
+```bash
+icp deploy -e staging   # second deployment on mainnet
+icp deploy -e ic        # production
+```
+
+TypeScript bindings replace `dfx generate`: `@icp-sdk/bindgen` generates
+`src/bindings/` from the committed `backend/backend.did` and
+`candid/ckbtc.did` during the Vite build. `backend/backend.did` is regenerated
+by `mops build` — commit it whenever the backend interface changes.
+
+### ICRC-85 cycle sharing is off
+
+The 0.2.x ICRC libraries added ICRC-85 "Open Value Sharing", which donates
+cycles to the library authors on a timer. The pre-migration libraries had no
+such mechanism, so `Backend.mo` disables it (`ovs_disabled`) to keep behaviour
+unchanged. To opt in, set `kill_switch = ?false`.
+
+Note the shared `TimerTool` instance is **not** optional even with sharing
+disabled: each library constructs an OVS instance that traps with
+`TimerTool required on environment` when the environment has none, and the kill
+switch is only consulted later, when the scheduled share action runs.
 
 ### Metadata changes need a fresh install
 
-`stable let icrc1_migration_state` only runs its initialiser on first install, so
-editing `default_icrc1_args` and *upgrading* changes nothing. Either reinstall
-(which wipes all balances) or use `admin_update_icrc1` at runtime — `#Name`,
-`#Symbol`, `#Logo` and `#FeeCollector` are all updatable that way. After a runtime
-change, fold the value back into the source or the next install will revert it.
+`icrc1_migration_state` only runs its initialiser on first install, so editing
+`default_icrc1_args` and *upgrading* changes nothing. Either reinstall (which
+wipes all balances) or use `admin_update_icrc1` at runtime — `#Name`, `#Symbol`,
+`#Logo` and `#FeeCollector` are all updatable that way. After a runtime change,
+fold the value back into the source or the next install will revert it.
 
 ## Licence
 

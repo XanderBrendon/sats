@@ -1,0 +1,32 @@
+canisters:
+  - name: backend
+    recipe:
+      type: "@dfinity/motoko@v5.1.0"
+
+  - name: frontend
+    recipe:
+      type: "@dfinity/static-site@v0.3.3"
+      configuration:
+        dir: dist
+        build:
+          - npm install
+          - npm run build
+
+networks:
+  # port 0 lets the OS pick a free port, so this project's local network never
+  # collides with another icp-cli project (or another worktree) on port 8000.
+  # Recover the actual port with `icp network status --json`; the Vite dev server
+  # does exactly that, so nothing hardcodes it.
+  - name: local
+    mode: managed
+    gateway:
+      port: 0
+
+environments:
+  # A second deployment target on mainnet, replacing the old `backend-staging`
+  # and `frontend-staging` canisters. The canister IDs differ per environment
+  # and reach the frontend through the ic_env cookie, so a single bundle is
+  # correct on both -- there is no build-time staging/production switch any more.
+  - name: staging
+    network: ic
+    canisters: [backend, frontend]

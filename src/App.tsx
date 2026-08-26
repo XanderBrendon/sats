@@ -3,14 +3,9 @@ import { useState, useEffect } from 'react';
 import headerLogo from './assets/logo.png';
 import sckbtcLogo from './assets/sats.png';
 import ckbtcLogo from './assets/ckbtc.png';
-// import { useQueryCall, useUpdateCall } from '@ic-reactor/react';
-import { Principal } from '@dfinity/principal';
-// import {Agent, Actor, HttpAgent} from '@dfinity/agent';
-import ic from 'ic0';
+import { Principal } from '@icp-sdk/core/principal';
 
-import { _SERVICE as ckbtcService } from './declarations/ckbtc-ledger/index.d';
-// service.d rather than index.d: dfx generate strips the re-export from index.d
-import { _SERVICE as satsService } from './declarations/service_hack/service';
+import { createCkbtc, type Backend, type Ckbtc } from './actors';
 import { CircularProgress } from '@mui/material';
 import CkBTCMintingField from './components/CkBTCMintingField';
 import SatsWithdrawField from './components/SatsWithdrawField';
@@ -19,7 +14,7 @@ import bigintToFloatString from './bigIntToFloatString';
 import PlugLoginHandler from './components/PlugLoginHandler';
 import InternetIdentityLoginHandler from './components/InternetIdentityLoginHandler';
 import TokenManagement from './components/TokenManagement';
-import { ckbtcCanisterID, SATSCanisterID } from './config';
+import { SATSCanisterID } from './config';
 
 
 function App() {
@@ -34,11 +29,8 @@ function App() {
   const [isConnected, setIsConnected] = useState<boolean>(false);
   const [connectionType, setConnectionType] = useState<string>('');
 
-  const [SATSActor, setSATSActor] = useState<satsService | null>(null);
-  // const [SATSActorTemp, setSATSActorTemp] = useState<satsService | null>(
-  //   null
-  // );
-  const [ckbtcLedgerActor, setCkBtcLedgerActor] = useState<ckbtcService | null>(null);
+  const [SATSActor, setSATSActor] = useState<Backend | null>(null);
+  const [ckbtcLedgerActor, setCkBtcLedgerActor] = useState<Ckbtc | null>(null);
 
   const [totalckBTCHeld, setTotalckBTCHeld] = useState<string>('');
 
@@ -47,24 +39,16 @@ function App() {
   const ckbtcFee: bigint = 10n; // ckBTC ledger fee, raw
   const SATSFee: bigint = 100n; // SATS ledger fee, raw
 
+  // Read anonymously: the vault total is public and must render before anyone
+  // connects a wallet.
   const fetchTotalTokens = async () => {
-    // const totalckBTCHeldResponse = await ckbtcLedgerActor.icrc1_balance_of({
-    //   owner: Principal.fromText(SATSCanisterID),
-    //   subaccount: [],
-    // }); // Can't use plug actors as anonymous.
+    if (!SATSCanisterID) return;
 
-    // We will use the internet identity anonymous calls in the next update. ic0 will work for now.
-    const ckbtcIcActor = await ic(ckbtcCanisterID);
-
-    const totalckBTCHeldResponse = await ckbtcIcActor.call('icrc1_balance_of', {
+    const totalckBTCHeldResponse = await createCkbtc().icrc1_balance_of({
       owner: Principal.fromText(SATSCanisterID),
-      subaccount: [],
     });
 
-    //const totalSckBTCMintedResponse = await SATSActor.icrc1_total_supply();
-
     setTotalckBTCHeld(bigintToFloatString(totalckBTCHeldResponse, 8));
-    //setTotalSckBTCMinted(bigintToFloatString(totalSckBTCMintedResponse));
   };
 
   const cleanUp = () => {
@@ -112,7 +96,6 @@ function App() {
 
     const ckbtcLedgerBalanceResponse = await ckbtcLedgerActor.icrc1_balance_of({
       owner: Principal.fromText(loggedInPrincipal),
-      subaccount: [],
     });
 
     //console.log('Fetching balances...', { ckbtcLedgerBalanceResponse });
@@ -125,7 +108,6 @@ function App() {
     if (!isValidPrincipal(loggedInPrincipal)) return;
     const SATSLedgerBalanceResponse = await SATSActor.icrc1_balance_of({
       owner: Principal.fromText(loggedInPrincipal),
-      subaccount: [],
     });
 
     setSATSLedgerBalance(SATSLedgerBalanceResponse);
@@ -135,12 +117,10 @@ function App() {
 
   const getCkBtcLedgerAllowance = async () => {
     if (ckbtcLedgerActor === null) return;
+    if (!SATSCanisterID || !isValidPrincipal(loggedInPrincipal)) return;
     const ckbtcLedgerAllowanceResponse = await ckbtcLedgerActor.icrc2_allowance({
-      account: {
-        owner: Principal.fromText(loggedInPrincipal),
-        subaccount: [],
-      },
-      spender: { owner: Principal.fromText(SATSCanisterID), subaccount: [] },
+      account: { owner: Principal.fromText(loggedInPrincipal) },
+      spender: { owner: Principal.fromText(SATSCanisterID) },
     });
 
     setCkBtcLedgerAllowance(ckbtcLedgerAllowanceResponse.allowance);
@@ -153,12 +133,10 @@ function App() {
 
   const getSckBTCLedgerAllowance = async () => {
     if (SATSActor === null) return;
+    if (!SATSCanisterID || !isValidPrincipal(loggedInPrincipal)) return;
     const SATSLedgerAllowanceResponse = await SATSActor.icrc2_allowance({
-      account: {
-        owner: Principal.fromText(loggedInPrincipal),
-        subaccount: [],
-      },
-      spender: { owner: Principal.fromText(SATSCanisterID), subaccount: [] },
+      account: { owner: Principal.fromText(loggedInPrincipal) },
+      spender: { owner: Principal.fromText(SATSCanisterID) },
     });
 
     setSATSLedgerAllowance(SATSLedgerAllowanceResponse.allowance); // Need to add check if response was good.
@@ -214,9 +192,7 @@ function App() {
       </div>
 
       <PlugLoginHandler
-        ckbtcCanisterID={ckbtcCanisterID}
         setCkBtcLedgerActor={setCkBtcLedgerActor}
-        SATSCanisterID={SATSCanisterID}
         setSATSActor={setSATSActor}
         loading={loading}
         setLoading={setLoading}
@@ -231,9 +207,7 @@ function App() {
       />
 
       <InternetIdentityLoginHandler
-        ckbtcCanisterID={ckbtcCanisterID}
         setCkBtcLedgerActor={setCkBtcLedgerActor}
-        SATSCanisterID={SATSCanisterID}
         setSATSActor={setSATSActor}
         loading={loading}
         setLoading={setLoading}

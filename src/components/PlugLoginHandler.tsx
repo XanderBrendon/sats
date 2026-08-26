@@ -1,15 +1,12 @@
 import { useEffect } from 'react';
-import { idlFactory as SATSFactory } from '../declarations/backend';
-// service.d rather than index.d: dfx generate strips the re-export from index.d
-import { _SERVICE as satsService } from '../declarations/service_hack/service';
-import { idlFactory as icpFactory } from '../declarations/ckbtc-ledger';
-import { _SERVICE as ckbtcService } from '../declarations/ckbtc-ledger/index.d';
+import { idlFactory as SATSFactory } from '../bindings/declarations/backend.did';
+import { idlFactory as ckbtcFactory } from '../bindings/declarations/ckbtc.did';
+import { Backend, Ckbtc } from '../actors';
+import { SATSCanisterID, ckbtcCanisterID } from '../config';
 
 interface PlugLoginHandlerProps {
-  ckbtcCanisterID: string;
-  setCkBtcLedgerActor: (value: ckbtcService | null) => void;
-  SATSCanisterID: string;
-  setSATSActor: (value: satsService | null) => void;
+  setCkBtcLedgerActor: (value: Ckbtc | null) => void;
+  setSATSActor: (value: Backend | null) => void;
   loading: boolean;
   setLoading: (value: boolean) => void;
   isConnected: boolean;
@@ -22,10 +19,25 @@ interface PlugLoginHandlerProps {
   setLoggedInPrincipal: (value: string) => void;
 }
 
+// Plug is a browser extension with its own agent, so unlike the Internet
+// Identity path it cannot read the ic_env cookie. Derive the network from where
+// the page is served instead; the local gateway serves the frontend from a
+// *.localhost host on a port chosen at network start.
+function plugHost(): string {
+  return isLocalHost() ? window.location.origin : 'https://ic0.app';
+}
+
+function isLocalHost(): boolean {
+  const { hostname } = window.location;
+  return (
+    hostname === 'localhost' ||
+    hostname === '127.0.0.1' ||
+    hostname.endsWith('.localhost')
+  );
+}
+
 const PlugLoginHandler: React.FC<PlugLoginHandlerProps> = ({
-  ckbtcCanisterID,
   setCkBtcLedgerActor,
-  SATSCanisterID,
   setSATSActor,
   loading,
   setLoading,
@@ -42,56 +54,47 @@ const PlugLoginHandler: React.FC<PlugLoginHandlerProps> = ({
     try {
       const connection = !!(await window.ic.plug.isConnected());
 
-      console.log({ connection });
-
       setIsConnected(connection);
-
-      if (connection) {
-        setConnectionType('plug');
-        return true;
-      } else {
-        setConnectionType('');
-        return false;
-      }
+      setConnectionType(connection ? 'plug' : '');
+      return connection;
     } catch {
       return false;
     }
   };
 
   useEffect(() => {
-    // This code runs after `icpActor` and `icdvActor` have been updated.
     if (isConnected && connectionType === 'plug') {
       fetchPrincipal();
-      // Ensure fetchBalances is defined and correctly handles asynchronous operations
       setUpActors();
-      console.log('isConnected', isConnected, connectionType);
     }
-
-    // Note: If `fetchBalances` depends on `icpActor` or `icdvActor`, you should ensure it's capable of handling null values or wait until these values are not null.
   }, [isConnected]);
 
   const fetchPrincipal = async () => {
-    if (!checkConnection) return;
     setLoggedInPrincipal(
       (await window.ic.plug.agent.getPrincipal()).toString()
     );
   };
 
   const setUpActors = async () => {
-    console.log('Setting up actors...', ckbtcCanisterID, SATSCanisterID);
-
+    // Plug hands back a raw Candid actor. Wrapping it in the generated classes
+    // keeps the rest of the app on one actor type regardless of how the user
+    // signed in.
     setSATSActor(
-      await window.ic.plug.createActor({
-        canisterId: SATSCanisterID,
-        interfaceFactory: SATSFactory,
-      })
+      new Backend(
+        await window.ic.plug.createActor({
+          canisterId: SATSCanisterID,
+          interfaceFactory: SATSFactory,
+        })
+      )
     );
 
     setCkBtcLedgerActor(
-      await window.ic.plug.createActor({
-        canisterId: ckbtcCanisterID,
-        interfaceFactory: icpFactory,
-      })
+      new Ckbtc(
+        await window.ic.plug.createActor({
+          canisterId: ckbtcCanisterID,
+          interfaceFactory: ckbtcFactory,
+        })
+      )
     );
   };
 
@@ -120,34 +123,26 @@ const PlugLoginHandler: React.FC<PlugLoginHandlerProps> = ({
     try {
       const connected = await checkConnection();
       if (!connected) {
-        const pubkey = await window.ic.plug.requestConnect({
-          // whitelist, host, and onConnectionUpdate need to be defined or imported appropriately
+        await window.ic.plug.requestConnect({
           whitelist: [ckbtcCanisterID, SATSCanisterID],
-          host:
-            process.env.DFX_NETWORK === 'local'
-              ? 'http://127.0.0.1:4943'
-              : 'https://ic0.app',
+          host: plugHost(),
           onConnectionUpdate: async () => {
-            console.log(
-              'Connection updated',
-              await window.ic.plug.isConnected()
-            );
             checkConnection();
           },
         });
-        if (process.env.DFX_NETWORK === 'local') {
-          await window.ic.plug.sessionManager.sessionData.agent.agent.fetchRootKey();
-        }
-        console.log('Connected with pubkey:', pubkey);
-        await setIsConnected(true);
-        setConnectionType('plug');
-      } else {
-        if (process.env.DFX_NETWORK === 'local') {
-          await window.ic.plug.sessionManager.sessionData.agent.agent.fetchRootKey();
-        }
-        setIsConnected(true);
-        setConnectionType('plug');
       }
+      // Plug's own agent does not read the ic_env cookie, so on a local network
+      // it still needs the root key fetched. This reaches into Plug internals,
+      // hence the guard.
+      if (isLocalHost()) {
+        try {
+          await window.ic.plug.sessionManager.sessionData.agent.agent.fetchRootKey();
+        } catch (error) {
+          console.warn('Could not fetch the local root key for Plug:', error);
+        }
+      }
+      setIsConnected(true);
+      setConnectionType('plug');
     } catch (error) {
       console.error('Login failed:', error);
       setIsConnected(false);

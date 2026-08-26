@@ -1,10 +1,9 @@
 import React, { useState } from 'react';
 import bigintToFloatString from '../bigIntToFloatString';
-import { _SERVICE as ckbtcService } from '../declarations/ckbtc-ledger/index.d';
-import { _SERVICE as satsService } from '../declarations/service_hack/service';
+import type { Icrc1Ledger } from '../actors';
 
 interface Token {
-  tokenActor: ckbtcService | satsService | null;
+  tokenActor: Icrc1Ledger | null;
   tokenFee: bigint;
   tokenTicker: string;
   tokenDecimals: number;

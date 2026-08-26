@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { TextField, ThemeProvider } from '@mui/material';
 import theme from '../theme';
 import bigintToFloatString from '../bigIntToFloatString';
-import { _SERVICE as satsService } from '../declarations/service_hack/service';
+import type { Backend } from '../actors';
 import ShowTransactionStatus from './ShowTransactionStatus';
 
 interface SatsWithdrawFieldProps {
@@ -12,7 +12,7 @@ interface SatsWithdrawFieldProps {
   SATSFee: bigint;
   ckbtcFee: bigint;
   isConnected: boolean;
-  SATSActor: satsService | null;
+  SATSActor: Backend | null;
   SATSCanisterID: string;
   cleanUp: () => void;
 }
@@ -87,8 +87,8 @@ const BobWithdrawField: React.FC<SatsWithdrawFieldProps> = ({
           6
         )} SATS to burn for ckBTC.`
       );
-      const result = await SATSActor.withdraw([], amountInE8s);
-      if ('ok' in result) {
+      const result = await SATSActor.withdraw(null, amountInE8s);
+      if (result.__kind__ === 'ok') {
         addStatus(
           `Swapped ${bigintToFloatString(
             amountInE8s,

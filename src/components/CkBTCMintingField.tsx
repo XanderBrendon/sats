@@ -2,9 +2,8 @@ import { useEffect, useState } from 'react';
 import { TextField, ThemeProvider } from '@mui/material';
 import theme from '../theme';
 import bigintToFloatString from '../bigIntToFloatString';
-import { Principal } from '@dfinity/principal';
-import { _SERVICE as ckbtcService } from '../declarations/ckbtc-ledger/index.d';
-import { _SERVICE as satsService } from '../declarations/service_hack/service';
+import { Principal } from '@icp-sdk/core/principal';
+import type { Backend, Ckbtc } from '../actors';
 import ShowTransactionStatus from './ShowTransactionStatus';
 
 interface CkBTCMintingFieldProps {
@@ -15,8 +14,8 @@ interface CkBTCMintingFieldProps {
   isConnected: boolean;
   SATSCanisterID: string;
   cleanUp: () => void;
-  ckbtcLedgerActor: ckbtcService | null;
-  SATSActor: satsService | null;
+  ckbtcLedgerActor: Ckbtc | null;
+  SATSActor: Backend | null;
   minimumTransactionAmount: bigint;
 }
 
@@ -96,22 +95,18 @@ const CkBTCMintingField: React.FC<CkBTCMintingFieldProps> = ({
     );
 
     try {
+      // Optional Candid fields are plain optional properties in the generated
+      // bindings, so anything not being set is simply omitted.
       const approvalResult = await ckbtcLedgerActor.icrc2_approve({
         amount: amountInE8s, // Approve amount and the fee to send ckbtc back during icrc2_transfer_from() in deposit() function
-        // Adjust with your canister ID and parameters
         spender: {
-          owner: await Principal.fromText(SATSCanisterID),
-          subaccount: [],
+          owner: Principal.fromText(SATSCanisterID),
         },
-        memo: [],
-        fee: [ckbtcFee],
-        created_at_time: [BigInt(Date.now()) * 1000000n],
-        expires_at: [],
-        expected_allowance: [],
-        from_subaccount: [],
+        fee: ckbtcFee,
+        created_at_time: BigInt(Date.now()) * 1000000n,
       });
 
-      if ('Ok' in approvalResult) {
+      if (approvalResult.__kind__ === 'Ok') {
         addStatus(
           `${bigintToFloatString(amountInE8s, 8)} ckBTC approved for transfer!`
         );
@@ -138,9 +133,9 @@ const CkBTCMintingField: React.FC<CkBTCMintingFieldProps> = ({
       addStatus(
         `Depositing ${bigintToFloatString(amountInE8s, 8)} ckBTC to mint SATS.`
       );
-      const result = await SATSActor.deposit([], amountInE8s);
+      const result = await SATSActor.deposit(null, amountInE8s);
 
-      if ('ok' in result) {
+      if (result.__kind__ === 'ok') {
         addStatus(
           `Swapped ${bigintToFloatString(
             amountInE8s,

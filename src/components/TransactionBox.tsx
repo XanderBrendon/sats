@@ -1,6 +1,5 @@
-import { Principal } from '@dfinity/principal';
-import { _SERVICE as ckbtcService } from '../declarations/ckbtc-ledger/index.d';
-import { _SERVICE as satsService } from '../declarations/service_hack/service';
+import { Principal } from '@icp-sdk/core/principal';
+import type { Icrc1Ledger } from '../actors';
 import { TextField, ThemeProvider } from '@mui/material';
 import { useEffect, useState } from 'react';
 import bigintToFloatString from '../bigIntToFloatString';
@@ -9,7 +8,7 @@ import theme from '../theme';
 interface TransactionBoxProps {
   loading: boolean;
   setLoading: (value: boolean) => void;
-  tokenActor: ckbtcService | satsService | null;
+  tokenActor: Icrc1Ledger | null;
   tokenFee: bigint;
   tokenTicker: string;
   tokenDecimals: number;
@@ -52,24 +51,22 @@ const TransactionBox: React.FC<TransactionBoxProps> = ({
 
     try {
       // Call the token actor's icrc1_transfer function
+      // Optional Candid fields are plain optional properties in the generated
+      // bindings, so the ones left unset are simply omitted.
       const result = await tokenActor.icrc1_transfer({
         amount: amountInE8s, // The amount to transfer (must be a bigint)
         to: {
           owner: toPrincipal, // The recipient's principal
-          subaccount: [], // Optional, an empty array for no subaccount
         },
-        fee: [tokenFee], // Optional fee, default is empty
-        memo: [], // Optional memo, default is empty
-        from_subaccount: [], // Optional, if you want to specify a subaccount
-        created_at_time: [BigInt(Date.now()) * 1000000n],
+        fee: tokenFee,
+        created_at_time: BigInt(Date.now()) * 1000000n,
       });
 
-      console.log({ result });
       // Handle the result
-      if ('Ok' in result) {
+      if (result.__kind__ === 'Ok') {
         console.log(`Transfer successful! Transaction ID: ${result.Ok}`);
         return result.Ok;
-      } else if ('Err' in result) {
+      } else {
         console.error('Transfer failed:', result.Err);
         return result.Err;
       }

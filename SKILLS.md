@@ -26,8 +26,8 @@ at any time.
 
 | Purpose | Canister ID |
 |---|---|
-| SATS ledger + wrapper (production) | `4fu6t-haaaa-aaaap-quxda-cai` |
-| SATS ledger + wrapper (staging) | `5r3gp-3iaaa-aaaap-qqaeq-cai` |
+| SATS ledger + wrapper (production) | assigned on first `icp deploy -e ic` |
+| SATS ledger + wrapper (staging) | assigned on first `icp deploy -e staging` |
 | ckBTC ledger | `mxzaz-hqaaa-aaaar-qaada-cai` |
 
 The wrapper **is** the ledger — one canister exposes both `deposit`/`withdraw`
@@ -71,25 +71,18 @@ round trip, not the transfers.
 Two calls. `deposit` mints the **full** amount with no protocol fee.
 
 ```bash
-BACKEND=4fu6t-haaaa-aaaap-quxda-cai
+BACKEND=<your-backend-canister-id>   # icp canister status backend -e ic --id-only
 CKBTC=mxzaz-hqaaa-aaaar-qaada-cai
 
 # 1. approve — must cover the deposit PLUS the 10-raw ckBTC ledger fee
-dfx canister --network ic call $CKBTC icrc2_approve "(record {
+icp canister call $CKBTC icrc2_approve "(record {
   spender = record { owner = principal \"$BACKEND\"; subaccount = null };
   amount = 10_010 : nat;
   fee = null; memo = null; from_subaccount = null;
   created_at_time = null; expected_allowance = null; expires_at = null;
-})"
+})" --network ic
 
 # 2. deposit — raw ckBTC
-dfx canister --network ic call $BACKEND deposit '(null, 10_000 : nat)'
-```
-
-icp CLI — same arguments, `--network` after them:
-
-```bash
-icp canister call $CKBTC icrc2_approve "(record { … })" --network ic
 icp canister call $BACKEND deposit '(null, 10_000 : nat)' --network ic
 ```
 
@@ -104,10 +97,6 @@ deposit at most `B − 20` and approve `B − 10`.
 ## Unwrapping: SATS → ckBTC
 
 One call. No approval — it burns from the caller's balance directly.
-
-```bash
-dfx canister --network ic call $BACKEND withdraw '(null, 1_600_000_000 : nat)'
-```
 
 ```bash
 icp canister call $BACKEND withdraw '(null, 1_600_000_000 : nat)' --network ic
@@ -140,15 +129,15 @@ your balance. Nothing is lost, but the released amount is `floor(amount / 1e8) �
 
 ```bash
 # balance — works on either ledger, units differ
-dfx canister --network ic call $BACKEND icrc1_balance_of \
-  "(record { owner = principal \"$P\"; subaccount = null })" --query
+icp canister call $BACKEND icrc1_balance_of \
+  "(record { owner = principal \"$P\"; subaccount = null })" --query --network ic
 
 # pay someone in SATS
-dfx canister --network ic call $BACKEND icrc1_transfer "(record {
+icp canister call $BACKEND icrc1_transfer "(record {
   to = record { owner = principal \"$RECIPIENT\"; subaccount = null };
   amount = 1_000_000 : nat;
   fee = null; memo = null; from_subaccount = null; created_at_time = null;
-})"
+})" --network ic
 ```
 
 > **Sending a full balance:** the 100-raw fee is charged **on top of** the
@@ -182,9 +171,9 @@ a material balance can verify this independently:
 
 ```bash
 # reserves × 1e8 must be >= total supply
-dfx canister --network ic call $CKBTC icrc1_balance_of \
-  '(record { owner = principal "4fu6t-haaaa-aaaap-quxda-cai"; subaccount = null })' --query
-dfx canister --network ic call $BACKEND icrc1_total_supply '()' --query
+icp canister call $CKBTC icrc1_balance_of \
+  "(record { owner = principal \"$BACKEND\"; subaccount = null })" --query --network ic
+icp canister call $BACKEND icrc1_total_supply '()' --query --network ic
 ```
 
 The invariant holds exactly in normal operation — retained protocol fees are
@@ -216,6 +205,6 @@ ckBTC transfers.
 - Standards: ICRC-1, ICRC-2, ICRC-3, ICRC-4, ICRC-10, ICRC-103, ICRC-106
 - Minimum deposit: 1,000 raw ckBTC (`0.00001`)
 - Minimum withdrawal: 16 SATS (`1_600_000_000` raw)
-- Candid UI: `https://a4gq6-oaaaa-aaaab-qaa4q-cai.raw.icp0.io/?id=4fu6t-haaaa-aaaap-quxda-cai`
+- Candid UI: `https://a4gq6-oaaaa-aaaab-qaa4q-cai.raw.icp0.io/?id=<your-backend-canister-id>`
 
 See [README.md](README.md) for deployment and development details.
