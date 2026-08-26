@@ -1,7 +1,5 @@
 # CLAUDE.md
 
-
-
 **Tradeoff:** These guidelines bias toward caution over speed. For trivial tasks, use judgment.
 
 ## 1. Think Before Coding
@@ -84,4 +82,3 @@ Judgment still applies — a single known file lookup doesn't need an agent. Thi
 ---
 
 **These guidelines are working if:** fewer unnecessary changes in diffs, fewer rewrites due to overcomplication, and clarifying questions come before implementation rather than after mistakes.
-
