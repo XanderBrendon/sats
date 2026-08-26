@@ -11,7 +11,6 @@ import CkBTCMintingField from './components/CkBTCMintingField';
 import SatsWithdrawField from './components/SatsWithdrawField';
 
 import bigintToFloatString from './bigIntToFloatString';
-import PlugLoginHandler from './components/PlugLoginHandler';
 import InternetIdentityLoginHandler from './components/InternetIdentityLoginHandler';
 import TokenManagement from './components/TokenManagement';
 import { SATSCanisterID } from './config';
@@ -190,21 +189,6 @@ function App() {
           )}{' '}
         </h3>
       </div>
-
-      <PlugLoginHandler
-        setCkBtcLedgerActor={setCkBtcLedgerActor}
-        setSATSActor={setSATSActor}
-        loading={loading}
-        setLoading={setLoading}
-        isConnected={isConnected}
-        setIsConnected={setIsConnected}
-        connectionType={connectionType}
-        setConnectionType={setConnectionType}
-        setCkBtcLedgerBalance={setCkBtcLedgerBalance}
-        setSATSLedgerBalance={setSATSLedgerBalance}
-        loggedInPrincipal={loggedInPrincipal}
-        setLoggedInPrincipal={setLoggedInPrincipal}
-      />
 
       <InternetIdentityLoginHandler
         setCkBtcLedgerActor={setCkBtcLedgerActor}
